@@ -2054,9 +2054,9 @@ function renderRhEntryThumbnail(kind, entry){
     const icon = kind === 'app' ? 'sparkles' : 'workflow';
     const candidates = rhEntryThumbnailCandidates(kind, entry);
     const thumbnail = String(entry?.thumbnail || '').trim();
-    const src = thumbnail || candidates[0] || '';
+    const src = thumbnail || '';
     if(!src) return `<i data-lucide="${icon}" class="w-5 h-5"></i>`;
-    const fallbacks = thumbnail ? candidates : candidates.slice(1);
+    const fallbacks = candidates.filter(url => url !== src);
     return `<img src="${escapeAttr(src)}" alt="" data-rh-thumb-fallbacks="${escapeAttr(fallbacks.join('|'))}" onerror="fallbackRhEntryThumbnail(this,'${icon}')">`;
 }
 function fallbackRhEntryThumbnail(img, icon){
@@ -2794,7 +2794,7 @@ function currentProviderApiKey(item){
 }
 function normalizeImageRequestMode(value){
     const mode = String(value || '').trim().toLowerCase();
-    return ['openai', 'openai-json', 'openai-video-proxy', 'openai-responses'].includes(mode) ? mode : 'openai';
+    return ['openai', 'openai-json', 'openai-video-proxy', 'openai-responses', 'openai-chat'].includes(mode) ? mode : 'openai';
 }
 function normalizeImageEditRoute(value){
     const route = String(value || '').trim().toLowerCase();
@@ -2805,6 +2805,7 @@ function imageRequestModeLabel(mode){
     if(normalized === 'openai-json') return 'OpenAI JSON';
     if(normalized === 'openai-video-proxy') return 'OpenAI 中转';
     if(normalized === 'openai-responses') return 'OpenAI RS';
+    if(normalized === 'openai-chat') return 'OpenAI Chat';
     return 'OpenAI 标准';
 }
 function isRunningHubContext(item, baseUrl=''){

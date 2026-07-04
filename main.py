@@ -265,7 +265,7 @@ JIMENG_LOGIN_SESSION = {
 
 PROVIDER_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{2,40}$")
 SUPPORTED_PROVIDER_PROTOCOLS = {"openai", "apimart", "gemini", "gemini-cli", "volcengine", "runninghub", "jimeng", "codex"}
-SUPPORTED_IMAGE_REQUEST_MODES = {"openai", "openai-json", "openai-video-proxy", "openai-responses"}
+SUPPORTED_IMAGE_REQUEST_MODES = {"openai", "openai-json", "openai-video-proxy", "openai-responses", "openai-chat"}
 RUNNINGHUB_DEFAULT_BASE_URL = "https://www.runninghub.cn"
 RUNNINGHUB_OPENAPI_BASE_URL = "https://www.runninghub.cn/openapi/v2"
 RUNNINGHUB_MODEL_REGISTRY_URL = "https://raw.githubusercontent.com/HM-RunningHub/ComfyUI_RH_OpenAPI/main/models_registry.json"
@@ -3560,23 +3560,63 @@ IMAGE_OUTPUT_KEY_HINTS = (
 )
 IMAGE_CONTAINER_KEY_HINTS = (
     "images", "image", "output", "outputs", "result", "results", "data", "items", "files",
+    "choices", "message", "content",
 )
 IMAGE_BASE64_KEY_HINTS = ("b64_json", "base64", "image_base64", "imageBase64")
 
-def looks_like_generated_image_url(value):
+def looks_like_generated_image_url(value, loose=False):
     text = str(value or "").strip()
     if not text:
         return False
     if text.startswith("data:image/"):
         return True
     clean = text.split("?", 1)[0].split("#", 1)[0].lower()
-    return text.startswith(("http://", "https://", "/output/", "/assets/")) and re.search(r"\.(png|jpe?g|webp|gif|bmp|tiff?)$", clean)
+    if text.startswith(("/output/", "/assets/")) and re.search(r"\.(png|jpe?g|webp|gif|bmp|tiff?)$", clean):
+        return True
+    if not text.startswith(("http://", "https://")):
+        return False
+    if re.search(r"\.(png|jpe?g|webp|gif|bmp|tiff?)$", clean):
+        return True
+    if not loose:
+        return False
+    # Some upstreams return generated images as signed URLs without a file extension,
+    # usually inside a chat message. Keep this limited to image-like hosts/paths.
+    parsed = urllib.parse.urlsplit(text)
+    haystack = f"{parsed.netloc} {parsed.path} {parsed.query}".lower()
+    if re.search(r"\.(html?|json|txt|md|pdf|mp4|mov|webm|mp3|wav|zip|rar|7z)$", clean):
+        return False
+    return any(token in haystack for token in (
+        "image", "img", "picture", "photo", "generated", "generation", "output",
+        "asset", "file", "download", "cdn", "oss", "cos", "s3", "r2",
+    ))
+
+def extract_image_urls_from_text(text):
+    text = str(text or "")
+    urls = []
+    seen = set()
+
+    def add(url, loose=True):
+        clean = str(url or "").strip().strip(" \t\r\n\"'<>)]}，。；;、")
+        if not clean:
+            return
+        if looks_like_generated_image_url(clean, loose=loose) and clean not in seen:
+            seen.add(clean)
+            urls.append(clean)
+
+    for match in re.finditer(r"!\[[^\]]*\]\(([^)\s]+)", text):
+        add(match.group(1), loose=True)
+    for match in re.finditer(r"https?://[^\s\"'<>)\]}，。；;、]+", text):
+        add(match.group(0), loose=True)
+    return urls
 
 def extract_image_flexible(value, depth=0):
     if depth > 8 or value is None:
         return None
     if isinstance(value, str):
-        return {"type": "url", "value": value} if looks_like_generated_image_url(value) else None
+        if looks_like_generated_image_url(value):
+            return {"type": "url", "value": value}
+        urls = extract_image_urls_from_text(value)
+        return {"type": "url", "value": urls[0]} if urls else None
     if isinstance(value, list):
         for item in value:
             found = extract_image_flexible(item, depth + 1)
@@ -3625,6 +3665,9 @@ def extract_images(data):
         if isinstance(value, str):
             if looks_like_generated_image_url(value):
                 add_image({"type": "url", "value": value})
+            else:
+                for url in extract_image_urls_from_text(value):
+                    add_image({"type": "url", "value": url})
             return
         if isinstance(value, list):
             for item in value:
@@ -3930,6 +3973,15 @@ RESPONSES_REJECT_STATUSES = {400, 404, 405, 415, 422}
 RESPONSES_POLL_INTERVAL = 5.0
 RESPONSES_POLL_MAX_SECONDS = 1500.0
 
+def responses_task_fetch_failed(data):
+    if not isinstance(data, dict):
+        return False
+    code = str(data.get("code") or data.get("error_code") or "").strip().lower()
+    message = str(data.get("message") or data.get("error") or "").strip().lower()
+    if code in {"failed_to_fetch_task", "method_not_allowed"}:
+        return True
+    return "failed_to_fetch_task" in message or ("method not allowed" in message and "task" in message)
+
 async def post_openai_responses(client, url, headers, body):
     """RS / Responses 请求。图片编辑经常超过 120 秒，非流式请求会被中转前面的
     Cloudflare 读超时掐断（Error 524）。策略按可靠性排序：
@@ -3959,6 +4011,9 @@ async def post_openai_responses(client, url, headers, body):
         data = resp.json()
     except ValueError:
         return resp
+    if responses_task_fetch_failed(data):
+        print(f"RS background 任务获取失败，改走流式：{str(data)[:200]}")
+        return await post_openai_responses_stream(client, url, headers, body)
     status = str((data or {}).get("status") or "").lower()
     rid = str((data or {}).get("id") or "").strip()
     if status not in {"queued", "in_progress", "processing", "pending", "running"} or not rid:
@@ -3986,6 +4041,9 @@ async def post_openai_responses(client, url, headers, body):
             data = poll.json()
         except ValueError:
             continue
+        if responses_task_fetch_failed(data):
+            print(f"RS background 轮询被上游任务接口拒绝，改走流式：{str(data)[:200]}")
+            return await post_openai_responses_stream(client, url, headers, body)
         status = str((data or {}).get("status") or "").lower()
         if status == "completed":
             return _responses_wrap(url, 200, data)
@@ -4084,8 +4142,7 @@ def effective_protocol(provider, model=""):
     return base
 
 def is_apimart_provider(provider):
-    base_url = str((provider or {}).get("base_url") or "").lower()
-    return provider_protocol(provider) == "apimart" or "apimart.ai" in base_url
+    return provider_protocol(provider) == "apimart"
 
 def detect_image_request_mode(base_url="", models=None):
     base = str(base_url or "").strip().lower()
@@ -9559,11 +9616,44 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
                 "model": model,
                 "prompt": prompt,
                 "aspect_ratio": runninghub_aspect_from_size(size, "1:1"),
+                "size": size,
             }
+            width, height = parse_size_pair(size)
+            if width and height:
+                body["width"] = width
+                body["height"] = height
             if image_refs:
                 body["images"] = [await openai_video_proxy_public_reference_url(ref) for ref in image_refs[:6]]
             video_url = f"{base_url}/videos" if base_url.endswith("/v1") else f"{base_url}/v1/videos"
             response = await client.post(video_url, headers=api_headers(provider=provider, model=model), json=body)
+        elif image_request_mode == "openai-chat":
+            size_instruction = responses_image_size_instruction(size)
+            input_text = f"{size_instruction}\n\n{prompt}" if size_instruction else prompt
+            content = [{"type": "text", "text": input_text}]
+            for ref in image_refs[:ONLINE_IMAGE_REFERENCE_MAX]:
+                image_url = reference_to_data_url(ref, max_size=1536)
+                if image_url:
+                    content.append({"type": "image_url", "image_url": {"url": image_url}})
+            body = {
+                "model": model,
+                "messages": [{"role": "user", "content": content}],
+                "stream": False,
+                "size": size,
+                "response_format": {"type": "text"},
+            }
+            width, height = parse_size_pair(size)
+            if width and height:
+                body["width"] = width
+                body["height"] = height
+            chat_url = provider_endpoint_url(provider, "image_generation_endpoint", "/v1/chat/completions")
+            response = await client.post(chat_url, headers=api_headers(provider=provider, model=model), json=body)
+            if response.status_code in {400, 415, 422} and any(token in response.text.lower() for token in ("unknown", "unsupported", "unrecognized", "unexpected", "extra fields", "response_format", "width", "height", "size")):
+                minimal_body = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": content}],
+                    "stream": False,
+                }
+                response = await client.post(chat_url, headers=api_headers(provider=provider, model=model), json=minimal_body)
         elif image_request_mode == "openai-responses":
             tool = {"type": "image_generation"}
             tool["action"] = "edit" if image_refs else "generate"
