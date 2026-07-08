@@ -770,12 +770,26 @@ function isGptImageAutoSizeModel(model){
         || compact.startsWith('gptimage2')
         || compact.endsWith('gptimage2');
 }
-function defaultApiImageResolution(model){
-    return isGptImageAutoSizeModel(resolveImageModel(model)) ? 'auto' : '1k';
+function providerAllowsAutoImageSize(providerId){
+    const provider = providerById(providerId || '');
+    const id = String(provider?.id || '').trim().toLowerCase();
+    const base = String(provider?.base_url || '').trim().toLowerCase();
+    return id === 'comfly' || id === 'openai' || base.includes('api.openai.com');
+}
+function imageModelAllowsAutoSize(model, providerId=''){
+    return isGptImageAutoSizeModel(resolveImageModel(model)) && providerAllowsAutoImageSize(providerId);
+}
+function defaultApiImageResolution(model, providerId=''){
+    return imageModelAllowsAutoSize(model, providerId) ? 'auto' : '1k';
 }
 function normalizedImageQuality(value){
     const quality = String(value || 'auto').trim().toLowerCase();
     return ['low','medium','high'].includes(quality) ? quality : '';
+}
+function normalizedImageTemperature(value){
+    const number = Number(value);
+    if(!Number.isFinite(number)) return 0.7;
+    return Math.max(0, Math.min(2, number));
 }
 function resolveChatModel(value, providerId=''){
     const providerModels = providerId ? providerChatModels(providerId) : [];
@@ -983,12 +997,13 @@ function exceedsFourKStandard(width, height){
 }
 function normalizeApiNodeSizeChoice(node){
     if(!node) return;
-    const allowAuto = isGptImageAutoSizeModel(resolveImageModel(node.model));
+    const allowAuto = imageModelAllowsAutoSize(node.model, node.apiProvider);
     if(allowAuto && node._apiResolutionUserSet !== true && (!node.resolution || node.resolution === '1k')) node.resolution = 'auto';
     else if(!node.resolution) node.resolution = allowAuto ? 'auto' : '1k';
     if(!allowAuto && node.resolution === 'auto') node.resolution = '1k';
 }
 async function generatorSizeForRun(gen, refs){
+    if(gen.resolution === 'custom') return String(gen.customSize || '').trim() || '1024x1024';
     if((gen.ratio || 'square') === 'source'){
         const ref = refs?.[0];
         if(ref?.url){
@@ -1004,7 +1019,7 @@ async function generatorSizeForRun(gen, refs){
     const ratio = (gen.ratio === 'source' && !gen.customRatio)
         ? 'square'
         : (gen.ratio ?? 'square');
-    return apiImageSize(ratio, gen.resolution || defaultApiImageResolution(gen.model), gen.customRatio || '', gen.customSize || '');
+    return apiImageSize(ratio, gen.resolution || defaultApiImageResolution(gen.model, gen.apiProvider), gen.customRatio || '', gen.customSize || '') || '1024x1024';
 }
 function normalizeApiNodeLayout(node){
     if(!node || node.type !== 'generator') return;
@@ -2023,6 +2038,7 @@ async function openCanvas(id){
         lastCanvasUpdatedAt = Number(canvas.updated_at || 0);
         localCanvasDirty = false;
         resetTransientRunState(nodes);
+        const repairedGroupItems = sanitizeCanvasGroupItems({useDom:false});
         sanitizeConnections();
         pruneMissingComfyWorkflows();
         await refreshMissingCanvasAssets();
@@ -2030,6 +2046,7 @@ async function openCanvas(id){
         setCanvasMode(true);
         renderCanvasList();
         render();
+        if(repairedGroupItems) scheduleSave();
         resumeCanvasImageTasks();
         startCanvasRemotePolling();
         setStatus('Ready');
@@ -2061,6 +2078,7 @@ function applyRemoteCanvasData(remote){
         lastCanvasUpdatedAt = Number(canvas.updated_at || Date.now());
         localCanvasDirty = false;
         resetTransientRunState(nodes);
+        sanitizeCanvasGroupItems({useDom:false});
         sanitizeConnections();
         pruneMissingComfyWorkflows();
         refreshMissingCanvasAssets().then(() => render());
@@ -2512,7 +2530,7 @@ function addGeneratorNode(point){
     const p = point || defaultPoint(120, 0);
     const providerId = imageApiProviders()[0]?.id || '';
     const model = allImageModels(providerId)[0] || '';
-    return addNode({id:uid('gen'), type:'generator', x:p.x, y:p.y, apiProvider:providerId, model, ratio:'square', resolution:defaultApiImageResolution(model), customRatio:'', customSize:'', customRatioWidth:'', customRatioHeight:'', customWidth:'', customHeight:'', inputs:[]});
+    return addNode({id:uid('gen'), type:'generator', x:p.x, y:p.y, apiProvider:providerId, model, ratio:'square', resolution:defaultApiImageResolution(model, providerId), customRatio:'', customSize:'', customRatioWidth:'', customRatioHeight:'', customWidth:'', customHeight:'', quality:'auto', temperature:0.7, inputs:[]});
 }
 function addMsGenNode(point){
     const p = point || defaultPoint(140, 0);
@@ -3339,8 +3357,7 @@ function outputDownloadableImageUrls(node){
 }
 function groupImageItems(group){
     if(!group || group.type !== 'group') return [];
-    return (group.items || [])
-        .map(id => nodes.find(n => n.id === id))
+    return canvasGroupMemberNodes(group)
         .filter(n => n?.type === 'image' && n.url && mediaKindForNode(n) === 'image' && !isMissingAssetUrl(n.url))
         .map((n, index) => ({url:n.url, name:n.name || outputImageName(n.url) || `image-${index + 1}.png`, kind:'image', nodeId:n.id, __index:index}));
 }
@@ -6175,7 +6192,7 @@ function renderNode(node){
     }
     if(node.type === 'loop') body.appendChild(renderLoopBody(node));
     if(node.type === 'group') {
-        const items = (node.items || []).map(id => nodes.find(n => n.id === id)).filter(Boolean);
+        const items = canvasGroupMemberNodes(node);
         const imgCount = items.filter(n => n.type === 'image').length;
         const promptCount = items.filter(n => n.type === 'prompt').length;
         const parts = [];
@@ -6204,7 +6221,7 @@ function renderNode(node){
         }
     }
     if(node.type === 'promptGroup') {
-        const promptNodes = (node.items || []).map(id => nodes.find(n => n.id === id)).filter(Boolean);
+        const promptNodes = canvasGroupMemberNodes(node);
         body.innerHTML = `<div class="text-[11px] text-gray-400">${promptNodes.length} ${tr('canvas.promptCount')} ${tr('canvas.grouped')}</div>`;
     }
     if(node.type === 'llm') body.appendChild(renderLLMBody(node));
@@ -6441,7 +6458,7 @@ function loopInputPromptItems(node){
                     return;
                 }
                 else if(n.type === 'promptGroup') {
-                    const parts = (n.items || []).map(id => nodes.find(x => x.id === id)).filter(Boolean).map(p => p.text || '').filter(Boolean);
+                    const parts = canvasGroupMemberNodes(n).map(p => p.text || '').filter(Boolean);
                     parts.forEach(part => {
                         const text = String(part || '').trim();
                         if(text) items.push(text);
@@ -6485,8 +6502,7 @@ function imageRefsFromNode(node){
     if(!node) return [];
     if(node.type === 'image' && node.url && mediaKindForNode(node) === 'image') return [{url:node.url, name:node.name || 'image', role:node.role || '', kind:'image'}];
     if(node.type === 'group'){
-        return (node.items || [])
-            .map(id => nodes.find(x => x.id === id))
+        return canvasGroupMemberNodes(node)
             .filter(x => x?.type === 'image' && x?.url && mediaKindForNode(x) === 'image')
             .map(img => ({url:img.url, name:img.name || 'image', role:img.role || '', kind:'image'}));
     }
@@ -6516,8 +6532,7 @@ function videoRefsFromNode(node){
     if(!node) return [];
     if(node.type === 'image' && node.url && mediaKindForNode(node) === 'video') return [{url:node.url, name:node.name || 'video', role:node.role || '', kind:'video'}];
     if(node.type === 'group'){
-        return (node.items || [])
-            .map(id => nodes.find(x => x.id === id))
+        return canvasGroupMemberNodes(node)
             .filter(x => x?.type === 'image' && x?.url && mediaKindForNode(x) === 'video')
             .map(vid => ({url:vid.url, name:vid.name || 'video', role:vid.role || '', kind:'video'}));
     }
@@ -8149,7 +8164,7 @@ function llmInputText(node){
     return connections.filter(c => c.to === node.id).map(c => nodes.find(n => n.id === c.from)).filter(Boolean).map(n => {
         if(n.type === 'prompt') return n.text || '';
         if(n.type === 'loop') return renderLoopPrompt(n);
-        if(n.type === 'promptGroup') return (n.items || []).map(id => nodes.find(x => x.id === id)).filter(Boolean).map(p => p.text || '').filter(Boolean).join('\n\n');
+        if(n.type === 'promptGroup') return canvasGroupMemberNodes(n).map(p => p.text || '').filter(Boolean).join('\n\n');
         if(n.type === 'llm') return n.outputText || '';
         return '';
     }).filter(Boolean).join('\n\n');
@@ -8163,7 +8178,7 @@ function llmInputImages(node){
             if(last) urls.push(last);
         }
         if(n.type === 'group'){
-            (n.items || []).map(id => nodes.find(x => x.id === id)).filter(x => x?.type === 'image' && x?.url && mediaKindForNode(x) === 'image').forEach(img => urls.push(img.url));
+            canvasGroupMemberNodes(n).filter(x => x?.type === 'image' && x?.url && mediaKindForNode(x) === 'image').forEach(img => urls.push(img.url));
         }
     });
     return urls;
@@ -8177,7 +8192,7 @@ function llmInputVideos(node){
             if(last) urls.push(last);
         }
         if(n.type === 'group'){
-            (n.items || []).map(id => nodes.find(x => x.id === id)).filter(x => x?.type === 'image' && x?.url && mediaKindForNode(x) === 'video').forEach(video => urls.push(video.url));
+            canvasGroupMemberNodes(n).filter(x => x?.type === 'image' && x?.url && mediaKindForNode(x) === 'video').forEach(video => urls.push(video.url));
         }
     });
     return urls;
@@ -8209,6 +8224,7 @@ function renderGeneratorBody(node){
                     <option value="custom">${tr('canvas.custom')}</option>
                 </select>
                 <select class="select-lite ratio compact-select" data-field="ratio">
+                    <option value="" disabled>自定义尺寸</option>
                     <option value="square">1:1</option>
                     <option value="portrait">2:3</option>
                     <option value="landscape">3:2</option>
@@ -8234,6 +8250,15 @@ function renderGeneratorBody(node){
                         <button class="gen-step-btn" data-step="1" type="button" title="${tr('canvas.increase')}" aria-label="${tr('canvas.increaseCount')}"><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button>
                     </div>
                 </div>
+            </div>
+            <div class="gen-settings-row temperature-row">
+                <label class="field" style="flex:1">
+                    <div class="setting-title">温度</div>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <input class="setting-input temperature-range" type="range" min="0" max="2" step="0.1" value="${normalizedImageTemperature(node.temperature)}" style="flex:1;min-width:0;padding:0">
+                        <input class="setting-input temperature-input" type="number" min="0" max="2" step="0.1" value="${normalizedImageTemperature(node.temperature).toFixed(1)}" style="width:64px;flex:0 0 64px;text-align:center">
+                    </div>
+                </label>
             </div>
             <div class="gen-settings-row custom-ratio-row" style="display:none">
                 <label class="field">
@@ -8273,7 +8298,7 @@ function renderGeneratorBody(node){
         const providerModels = providerImageModels(node.apiProvider);
         if(!providerModels.includes(resolveImageModel(node.model))) node.model = providerModels[0] || '';
         node._apiResolutionUserSet = false;
-        node.resolution = defaultApiImageResolution(node.model);
+        node.resolution = defaultApiImageResolution(node.model, node.apiProvider);
         modelSelect.innerHTML = imageModelOptions(node.model, node.apiProvider);
         syncSizeControls();
         syncQualityControls();
@@ -8285,7 +8310,7 @@ function renderGeneratorBody(node){
         e.stopPropagation();
         node.model = e.target.value;
         node._apiResolutionUserSet = false;
-        if(node.resolution !== 'custom') node.resolution = defaultApiImageResolution(node.model);
+        if(node.resolution !== 'custom') node.resolution = defaultApiImageResolution(node.model, node.apiProvider);
         syncSizeControls();
         syncQualityControls();
         scheduleSave();
@@ -8293,6 +8318,7 @@ function renderGeneratorBody(node){
     const ratioSelect = wrap.querySelector('.ratio');
     const resolutionSelect = wrap.querySelector('.resolution');
     const qualitySelect = wrap.querySelector('.quality-select');
+    const temperatureInputs = [...wrap.querySelectorAll('.temperature-input, .temperature-range')];
     const customRatioRow = wrap.querySelector('.custom-ratio-row');
     const customSizeRow = wrap.querySelector('.custom-size-row');
     const customRatioWInput = wrap.querySelector('.custom-ratio-w-input');
@@ -8305,6 +8331,12 @@ function renderGeneratorBody(node){
         qualitySelect.disabled = false;
         if(!['auto','low','medium','high'].includes(String(node.quality || 'auto'))) node.quality = 'auto';
         qualitySelect.value = node.quality || 'auto';
+    };
+    const syncTemperatureControls = () => {
+        node.temperature = normalizedImageTemperature(node.temperature);
+        temperatureInputs.forEach(input => {
+            input.value = input.type === 'number' ? node.temperature.toFixed(1) : String(node.temperature);
+        });
     };
     const hydrateCustomParts = () => {
         if((!node.customRatioWidth || !node.customRatioHeight) && node.customRatio) {
@@ -8350,15 +8382,17 @@ function renderGeneratorBody(node){
     const syncSizeControls = () => {
         normalizeApiNodeSizeChoice(node);
         const autoOption = resolutionSelect.querySelector('option[value="auto"]');
-        if(autoOption) autoOption.disabled = !isGptImageAutoSizeModel(resolveImageModel(node.model));
+        if(autoOption) autoOption.disabled = !imageModelAllowsAutoSize(node.model, node.apiProvider);
         const squareOption = ratioSelect.querySelector('option[value="square"]');
         if(squareOption){
             squareOption.disabled = false;
             squareOption.title = '';
         }
-        const ratioValue = node.ratio && [...ratioSelect.options].some(opt => opt.value === node.ratio) ? node.ratio : 'square';
+        const ratioValue = node.resolution === 'custom'
+            ? ''
+            : (node.ratio && [...ratioSelect.options].some(opt => opt.value === node.ratio) ? node.ratio : 'square');
         ratioSelect.value = ratioValue;
-        resolutionSelect.value = node.resolution || defaultApiImageResolution(node.model);
+        resolutionSelect.value = node.resolution || defaultApiImageResolution(node.model, node.apiProvider);
         ratioSelect.disabled = node.resolution === 'custom' || node.resolution === 'auto';
         customRatioRow.style.display = (node.resolution !== 'auto' && (node.ratio === 'custom' || node.ratio === 'source')) ? 'flex' : 'none';
         customSizeRow.style.display = node.resolution === 'custom' ? 'flex' : 'none';
@@ -8370,6 +8404,7 @@ function renderGeneratorBody(node){
         customHInput.value = node.customHeight || '';
         if(fitSizeBtn) fitSizeBtn.disabled = !referenceImages.some(ref => ref.url);
         syncQualityControls();
+        syncTemperatureControls();
         if(node.ratio === 'source') updateSourceRatioFromFirstRef();
     };
     qualitySelect.onmousedown = e => e.stopPropagation();
@@ -8379,6 +8414,18 @@ function renderGeneratorBody(node){
         node.quality = e.target.value;
         scheduleSave();
     };
+    temperatureInputs.forEach(input => {
+        input.onmousedown = e => e.stopPropagation();
+        input.onclick = e => e.stopPropagation();
+        input.oninput = e => {
+            e.stopPropagation();
+            const number = Number(e.target.value);
+            if(Number.isFinite(number)) node.temperature = Math.max(0, Math.min(2, number));
+            syncTemperatureControls();
+            scheduleSave();
+        };
+        input.onblur = () => syncTemperatureControls();
+    });
     ratioSelect.onmousedown = e => e.stopPropagation();
     ratioSelect.onclick = e => e.stopPropagation();
     ratioSelect.onchange = e => {
@@ -10002,8 +10049,7 @@ function mediaRefsFromNode(node){
         return [{url:node.url, name:node.name || kind, role:node.role || '', kind}];
     }
     if(node.type === 'group'){
-        return (node.items || [])
-            .map(id => nodes.find(x => x.id === id))
+        return canvasGroupMemberNodes(node)
             .filter(x => x?.type === 'image' && x?.url)
             .map(item => ({url:item.url, name:item.name || mediaKindForNode(item), role:item.role || '', kind:mediaKindForNode(item)}));
     }
@@ -10048,7 +10094,7 @@ function generatorSources(gen){
             return {id:n.id, type:kind, label:n.name || kind, preview:n.url, refs:[{url:n.url, name:n.name || kind, role:n.role || '', kind}], prompt:''};
         }
         if(n.type === 'group') {
-            const items = (n.items || []).map(id => nodes.find(x => x.id === id)).filter(Boolean);
+            const items = canvasGroupMemberNodes(n);
             const sources = items.filter(x => x.type === 'image' && x.url).map(img => ({
                 id:`${n.id}:${img.id}`,
                 type:`group-${mediaKindForNode(img)}`,
@@ -10096,7 +10142,7 @@ function generatorSources(gen){
             return {id:n.id, type:'loop', label:`${tr('canvas.loopNode')} ${loopCount(n)}x`, refs:[], prompt};
         }
         if(n.type === 'promptGroup') {
-            const prompts = (n.items || []).map(id => nodes.find(x => x.id === id)).filter(Boolean).map(p => p.text || '').filter(Boolean);
+            const prompts = canvasGroupMemberNodes(n).map(p => p.text || '').filter(Boolean);
             return {id:n.id, type:'promptGroup', label:`提示词 ${prompts.length} 个`, refs:[], prompt:prompts.join('\n\n')};
         }
         if(n.type === 'llm' && (n.mode || 'node') === 'node' && n.outputText) return {id:n.id, type:'llm', label:(n.outputText || 'LLM').slice(0, 32), refs:[], prompt:n.outputText || ''};
@@ -10179,6 +10225,7 @@ async function runGenerator(genId, opts={}){
         provider_id:resolveImageProviderId(gen.apiProvider || 'comfly'),
         model:resolveImageModel(gen.model),
         size:await generatorSizeForRun(gen, refs),
+        temperature:normalizedImageTemperature(gen.temperature),
         reference_images:refs.slice(0, CANVAS_REFERENCE_IMAGE_MAX)
     };
     const quality = normalizedImageQuality(gen.quality);
@@ -10275,6 +10322,7 @@ async function runGeneratorLegacy(genId, opts={}){
             provider_id:resolveImageProviderId(gen.apiProvider || 'comfly'),
             model:resolveImageModel(gen.model),
             size:requestSize,
+            temperature:normalizedImageTemperature(gen.temperature),
             reference_images:refs.slice(0, CANVAS_REFERENCE_IMAGE_MAX)
         };
         const quality = normalizedImageQuality(gen.quality);
@@ -13229,16 +13277,57 @@ function cloneNode(n, dx, dy){
     copy.running = false;
     return copy;
 }
+function isCanvasGroupNode(node){
+    return node?.type === 'group' || node?.type === 'promptGroup';
+}
+function canvasStoredNodeRect(node){
+    const min = defaultNodeSize(node?.type || 'image');
+    const w = Number(node?.w || min.w || 260);
+    const h = Number(node?.h || min.h || 160);
+    const x = Number(node?.x || 0);
+    const y = Number(node?.y || 0);
+    return {x, y, w, h, cx:x + w / 2, cy:y + h / 2};
+}
+function canvasNodeCenterInsideGroup(node, group, useDom=true){
+    if(!node || !group || node.id === group.id) return false;
+    const cr = useDom ? nodeRect(node) : canvasStoredNodeRect(node);
+    const gr = useDom ? nodeRect(group) : canvasStoredNodeRect(group);
+    const pad = 4;
+    return cr.cx >= gr.x - pad && cr.cx <= gr.x + gr.w + pad
+        && cr.cy >= gr.y - pad && cr.cy <= gr.y + gr.h + pad;
+}
+function canvasGroupMemberNodes(group, options={}){
+    if(!isCanvasGroupNode(group) || !Array.isArray(group.items)) return [];
+    const useDom = options.useDom !== false;
+    const seen = new Set();
+    return group.items
+        .map(id => nodes.find(n => n.id === id))
+        .filter(node => {
+            if(!node || seen.has(node.id)) return false;
+            seen.add(node.id);
+            return canvasNodeCenterInsideGroup(node, group, useDom);
+        });
+}
+function sanitizeCanvasGroupItems(options={}){
+    let changed = false;
+    nodes.filter(isCanvasGroupNode).forEach(group => {
+        const oldItems = Array.isArray(group.items) ? group.items : [];
+        const nextItems = canvasGroupMemberNodes(group, options).map(node => node.id);
+        if(oldItems.length !== nextItems.length || oldItems.some((id, index) => id !== nextItems[index])){
+            group.items = nextItems;
+            changed = true;
+        }
+    });
+    return changed;
+}
 function duplicateNodesForAltDrag(node, preserveConnections=false){
     const copy = cloneNode(node, 0, 0);
     const sourceIds = new Set([node.id]);
     const idMap = new Map([[node.id, copy.id]]);
     const copies = [copy];
-    const isGroup = node.type === 'group' || node.type === 'promptGroup';
+    const isGroup = isCanvasGroupNode(node);
     if(isGroup && node.items?.length){
-        const childCopies = node.items
-            .map(id => nodes.find(n => n.id === id))
-            .filter(Boolean)
+        const childCopies = canvasGroupMemberNodes(node)
             .map(child => {
                 const childCopy = cloneNode(child, 0, 0);
                 sourceIds.add(child.id);
@@ -13246,7 +13335,7 @@ function duplicateNodesForAltDrag(node, preserveConnections=false){
                 copies.push(childCopy);
                 return childCopy;
             });
-        copy.items = copy.items.map(id => idMap.get(id) || id);
+        copy.items = copy.items.map(id => idMap.get(id)).filter(Boolean);
         nodes.push(...childCopies, copy);
     } else {
         nodes.push(copy);
@@ -13269,11 +13358,26 @@ function duplicateNodesForAltDrag(node, preserveConnections=false){
     }
     return copy;
 }
+function expandCanvasNodeIdsWithGroupMembers(ids){
+    const expanded = new Set();
+    const collect = id => {
+        if(!id || expanded.has(id)) return;
+        const node = nodes.find(n => n.id === id);
+        if(!node) return;
+        expanded.add(id);
+        if(isCanvasGroupNode(node) && Array.isArray(node.items)){
+            canvasGroupMemberNodes(node).forEach(child => collect(child.id));
+        }
+    };
+    (ids || []).forEach(collect);
+    return expanded;
+}
 function copySelectedNodes(){
     if(!canvas || !selected.size) return;
     const el = document.activeElement;
     if(el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) return;
-    const toCopy = [...selected].map(id => nodes.find(n => n.id === id)).filter(Boolean);
+    const expandedIds = expandCanvasNodeIdsWithGroupMembers([...selected]);
+    const toCopy = [...expandedIds].map(id => nodes.find(n => n.id === id)).filter(Boolean);
     if(!toCopy.length) return;
     const ids = new Set(toCopy.map(n => n.id));
     const pickedConnections = (connections || []).filter(c => ids.has(c.from) && ids.has(c.to)).map(c => ({...c}));
@@ -13302,7 +13406,7 @@ function pasteNodes(){
     const copies = clipNodes.map(n => { const c = cloneNode(n, dx, dy); idMap.set(n.id, c.id); return c; });
     copies.forEach(c => {
         if((c.type === 'group' || c.type === 'promptGroup') && c.items)
-            c.items = c.items.map(id => idMap.get(id) || id);
+            c.items = c.items.map(id => idMap.get(id)).filter(Boolean);
     });
     const newConnections = clipConnections
         .map(c => ({...c, id:uid('c'), from:idMap.get(c.from), to:idMap.get(c.to)}))
@@ -13317,7 +13421,7 @@ function pasteNodes(){
     scheduleSave();
 }
 function selectedWorkflowPayload(){
-    const ids = new Set([...selected].filter(id => nodes.some(n => n.id === id)));
+    const ids = expandCanvasNodeIdsWithGroupMembers([...selected].filter(id => nodes.some(n => n.id === id)));
     const pickedNodes = [...ids].map(id => nodes.find(n => n.id === id)).filter(Boolean);
     const pickedConnections = connections.filter(c => ids.has(c.from) && ids.has(c.to)).map(c => ({...c}));
     return {
@@ -13515,7 +13619,7 @@ function insertWorkflowIntoCanvas(imported){
     });
     newNodes.forEach(node => {
         if((node.type === 'group' || node.type === 'promptGroup') && Array.isArray(node.items)){
-            node.items = node.items.map(id => idMap.get(id) || id).filter(id => idMap.has(id) || nodes.some(n => n.id === id));
+            node.items = node.items.map(id => idMap.get(id)).filter(Boolean);
         }
     });
     const newConnections = srcConnections
@@ -13568,12 +13672,12 @@ function startNodeDrag(e, node){
     const collect = n => {
         if(!n || collected.has(n.id) || n.id === dragTarget.id) return;
         collected.set(n.id, {node:n, ox:n.x, oy:n.y});
-        if(n.type === 'group' || n.type === 'promptGroup'){
-            (n.items || []).map(id => nodes.find(x => x.id === id)).forEach(collect);
+        if(isCanvasGroupNode(n)){
+            canvasGroupMemberNodes(n).forEach(collect);
         }
     };
     if(isGroup){
-        (dragTarget.items || []).map(id => nodes.find(n => n.id === id)).forEach(collect);
+        canvasGroupMemberNodes(dragTarget).forEach(collect);
     }
     // 如果被拖节点在多选里，所有其他选中节点（含其组成员）一起移动
     if(selected.has(dragTarget.id) && selected.size > 1){
@@ -13814,10 +13918,10 @@ function canvasArrangeAtomicIds(ids){
     let changed = true;
     while(changed){
         changed = false;
-        nodes.filter(n => (n.type === 'group' || n.type === 'promptGroup') && Array.isArray(n.items)).forEach(group => {
-            (group.items || []).forEach(itemId => {
-                if(!out.has(itemId)) return;
-                out.delete(itemId);
+        nodes.filter(n => isCanvasGroupNode(n) && Array.isArray(n.items)).forEach(group => {
+            canvasGroupMemberNodes(group).forEach(item => {
+                if(!out.has(item.id)) return;
+                out.delete(item.id);
                 out.add(group.id);
                 changed = true;
             });
@@ -13828,11 +13932,10 @@ function canvasArrangeAtomicIds(ids){
 function translateCanvasNodeWithMembers(node, dx, dy, seen=new Set()){
     if(!node || seen.has(node.id)) return;
     seen.add(node.id);
+    const memberNodes = isCanvasGroupNode(node) ? canvasGroupMemberNodes(node) : [];
     node.x = Math.round((Number(node.x) || 0) + dx);
     node.y = Math.round((Number(node.y) || 0) + dy);
-    if(node.type === 'group' || node.type === 'promptGroup'){
-        (node.items || []).forEach(id => translateCanvasNodeWithMembers(nodes.find(n => n.id === id), dx, dy, seen));
-    }
+    memberNodes.forEach(member => translateCanvasNodeWithMembers(member, dx, dy, seen));
 }
 function moveCanvasNodeAtom(node, x, y){
     const dx = Math.round(x - (Number(node.x) || 0));
@@ -14498,8 +14601,8 @@ function deleteSelectedNodes(){
         if(toDelete.has(id)) return;
         toDelete.add(id);
         const n = nodes.find(x => x.id === id);
-        if(n && (n.type === 'group' || n.type === 'promptGroup')){
-            (n.items || []).forEach(collect);
+        if(isCanvasGroupNode(n)){
+            canvasGroupMemberNodes(n).forEach(member => collect(member.id));
         }
     };
     selected.forEach(collect);

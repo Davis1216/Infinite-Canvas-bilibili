@@ -2371,6 +2371,7 @@ class OnlineImageRequest(BaseModel):
     model: str = ""
     size: str = "1024x1024"
     quality: str = "auto"
+    temperature: float = 0.7
     n: int = 1
     reference_images: List[AIReference] = []
 
@@ -2505,6 +2506,7 @@ class ChatRequest(BaseModel):
     mode: str = "chat"
     size: str = "1024x1024"
     quality: str = "auto"
+    temperature: float = 0.7
     reference_images: List[AIReference] = []
     provider: str = "comfly"
     ms_model: str = ""
@@ -3836,6 +3838,23 @@ def extract_task_id_from_text(text):
 def images_api_unsupported(response):
     text = str(getattr(response, "text", "") or "").lower()
     return "images api is not supported" in text or "not supported for this platform" in text
+
+def normalize_image_temperature(value, default=0.7):
+    try:
+        temperature = float(value)
+    except (TypeError, ValueError):
+        temperature = default
+    if not math.isfinite(temperature):
+        temperature = default
+    return max(0.0, min(2.0, temperature))
+
+def image_temperature_unsupported(response):
+    text = str(getattr(response, "text", "") or "").lower()
+    if "temperature" not in text:
+        return False
+    return getattr(response, "status_code", 0) in {400, 415, 422} and any(
+        token in text for token in ("unknown", "unsupported", "unrecognized", "unexpected", "extra fields", "not allowed")
+    )
 
 def responses_image_size_instruction(size: str) -> str:
     """RS 中转多为网页版逆向：结构化 size 参数（tool.size / 顶层 size / --size 尾注）全被无视，
@@ -9565,7 +9584,7 @@ async def generate_runninghub_video(payload, provider):
         local_urls = [await save_remote_video_to_output(url, prefix="rh_video_") for url in urls]
         return {"videos": local_urls, "task_id": task_id, "raw": result}
 
-async def generate_ai_image(prompt, size, quality, model, reference_images=None, provider_id="comfly"):
+async def generate_ai_image(prompt, size, quality, model, reference_images=None, provider_id="comfly", temperature=0.7):
     provider = get_api_provider(provider_id)
     if provider["id"] == "modelscope":
         return await generate_modelscope_provider_image(prompt, size, model, reference_images, provider)
@@ -9588,6 +9607,7 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
     quality = str(quality or "").strip().lower()
     if quality not in {"low", "medium", "high"}:
         quality = ""
+    temperature = normalize_image_temperature(temperature)
     base_url = (provider.get("base_url") or AI_BASE_URL).rstrip("/")
     if not base_url:
         raise HTTPException(status_code=400, detail=f"{provider.get('name') or provider['id']} 未配置 Base URL")
@@ -9600,6 +9620,14 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
     request_timeout = httpx.Timeout(connect=20.0, read=1800.0, write=120.0, pool=20.0) if (is_gpt2 or is_apimart or image_request_mode in {"openai-json", "openai-video-proxy", "openai-responses"}) else AI_REQUEST_TIMEOUT
     async with httpx.AsyncClient(timeout=request_timeout) as client:
         response = None
+        async def post_json(url, body):
+            resp = await client.post(url, headers=api_headers(provider=provider, model=model), json=body)
+            if image_temperature_unsupported(resp) and "temperature" in body:
+                fallback_body = dict(body)
+                fallback_body.pop("temperature", None)
+                resp = await client.post(url, headers=api_headers(provider=provider, model=model), json=fallback_body)
+            return resp
+
         async def post_openai_edits(edit_files=None):
             data = {"model": model, "prompt": prompt, "size": size}
             if quality:
@@ -9617,6 +9645,7 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
                 "prompt": prompt,
                 "aspect_ratio": runninghub_aspect_from_size(size, "1:1"),
                 "size": size,
+                "temperature": temperature,
             }
             width, height = parse_size_pair(size)
             if width and height:
@@ -9625,7 +9654,7 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
             if image_refs:
                 body["images"] = [await openai_video_proxy_public_reference_url(ref) for ref in image_refs[:6]]
             video_url = f"{base_url}/videos" if base_url.endswith("/v1") else f"{base_url}/v1/videos"
-            response = await client.post(video_url, headers=api_headers(provider=provider, model=model), json=body)
+            response = await post_json(video_url, body)
         elif image_request_mode == "openai-chat":
             size_instruction = responses_image_size_instruction(size)
             input_text = f"{size_instruction}\n\n{prompt}" if size_instruction else prompt
@@ -9639,6 +9668,7 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
                 "messages": [{"role": "user", "content": content}],
                 "stream": False,
                 "size": size,
+                "temperature": temperature,
                 "response_format": {"type": "text"},
             }
             width, height = parse_size_pair(size)
@@ -9646,14 +9676,15 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
                 body["width"] = width
                 body["height"] = height
             chat_url = provider_endpoint_url(provider, "image_generation_endpoint", "/v1/chat/completions")
-            response = await client.post(chat_url, headers=api_headers(provider=provider, model=model), json=body)
-            if response.status_code in {400, 415, 422} and any(token in response.text.lower() for token in ("unknown", "unsupported", "unrecognized", "unexpected", "extra fields", "response_format", "width", "height", "size")):
+            response = await post_json(chat_url, body)
+            if response.status_code in {400, 415, 422} and any(token in response.text.lower() for token in ("unknown", "unsupported", "unrecognized", "unexpected", "extra fields", "response_format", "width", "height", "size", "temperature")):
                 minimal_body = {
                     "model": model,
                     "messages": [{"role": "user", "content": content}],
                     "stream": False,
+                    "temperature": temperature,
                 }
-                response = await client.post(chat_url, headers=api_headers(provider=provider, model=model), json=minimal_body)
+                response = await post_json(chat_url, minimal_body)
         elif image_request_mode == "openai-responses":
             tool = {"type": "image_generation"}
             tool["action"] = "edit" if image_refs else "generate"
@@ -9672,9 +9703,14 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
                 "model": model,
                 "input": [{"role": "user", "content": content}],
                 "tools": [tool],
+                "temperature": temperature,
             }
             responses_url = provider_endpoint_url(provider, "image_generation_endpoint", "/v1/responses")
             response = await post_openai_responses(client, responses_url, api_headers(provider=provider, model=model), body)
+            if image_temperature_unsupported(response):
+                fallback_body = dict(body)
+                fallback_body.pop("temperature", None)
+                response = await post_openai_responses(client, responses_url, api_headers(provider=provider, model=model), fallback_body)
         elif image_request_mode == "openai-json":
             # Agnes 等“OpenAI JSON 图片接口”统一走 /images/generations：
             # 不使用 /images/edits，不传顶层 response_format/n/quality；
@@ -9682,8 +9718,8 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
             extra_body = {"response_format": "url"}
             if image_refs:
                 extra_body["image"] = [reference_to_data_url(ref, max_size=1536) for ref in image_refs[:ONLINE_IMAGE_REFERENCE_MAX]]
-            body = {"model": model, "prompt": prompt, "size": size, "extra_body": extra_body}
-            response = await client.post(gen_url, headers=api_headers(provider=provider, model=model), json=body)
+            body = {"model": model, "prompt": prompt, "size": size, "temperature": temperature, "extra_body": extra_body}
+            response = await post_json(gen_url, body)
         elif is_apimart:
             apimart_size, resolution = apimart_size_resolution(size)
             # APIMart 的 GPT-Image-2 图生图仍走 /images/generations，
@@ -9694,16 +9730,17 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
                 "n": 1,
                 "size": apimart_size,
                 "resolution": resolution,
+                "temperature": temperature,
                 "official_fallback": False,
             }
             if image_refs:
                 body["image_urls"] = [reference_to_data_url(ref, max_size=1536) for ref in image_refs[:ONLINE_IMAGE_REFERENCE_MAX]]
-            response = await client.post(gen_url, headers=api_headers(provider=provider, model=model), json=body)
+            response = await post_json(gen_url, body)
         elif is_gpt2 and not image_refs and not mask_refs:
-            body = {"model": model, "prompt": prompt, "size": size}
+            body = {"model": model, "prompt": prompt, "size": size, "temperature": temperature}
             if quality:
                 body["quality"] = quality
-            response = await client.post(gen_url, headers=api_headers(provider=provider, model=model), json=body)
+            response = await post_json(gen_url, body)
             if response.status_code >= 400 and images_api_unsupported(response):
                 response = await post_openai_edits()
         elif image_refs:
@@ -9751,26 +9788,22 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
                 image_payload = [reference_to_data_url(ref, max_size=1536) for ref in image_refs[:ONLINE_IMAGE_REFERENCE_MAX]]
                 body = {
                     "model": model, "prompt": prompt, "size": size,
-                    "response_format": "url", "n": 1,
+                    "response_format": "url", "n": 1, "temperature": temperature,
                     "image": image_payload,
                 }
                 if quality:
                     body["quality"] = quality
-                response = await client.post(gen_url, headers=api_headers(provider=provider, model=model), json=body)
+                response = await post_json(gen_url, body)
                 if response.status_code >= 400 and images_api_unsupported(response):
                     raise HTTPException(
                         status_code=502,
                         detail=f"编辑接口 /images/edits 调用失败，且该平台不支持 /images/generations：{edit_failed_text[:300] or edit_failed_status}"
                     )
         else:
-            body = {"model": model, "prompt": prompt, "size": size, "response_format": "url", "n": 1}
+            body = {"model": model, "prompt": prompt, "size": size, "response_format": "url", "n": 1, "temperature": temperature}
             if quality:
                 body["quality"] = quality
-            response = await client.post(
-                gen_url,
-                headers=api_headers(provider=provider, model=model),
-                json=body,
-            )
+            response = await post_json(gen_url, body)
             if response.status_code >= 400 and images_api_unsupported(response):
                 response = await post_openai_edits()
         response.raise_for_status()
@@ -12221,7 +12254,7 @@ async def build_online_image_result(payload: OnlineImageRequest):
     image_refs = image_references(refs)
     count = max(1, min(8, int(payload.n or 1)))
     async def generate_one():
-        image_data, raw_item = await generate_ai_image(payload.prompt, payload.size, payload.quality, model, image_refs, provider["id"])
+        image_data, raw_item = await generate_ai_image(payload.prompt, payload.size, payload.quality, model, image_refs, provider["id"], payload.temperature)
         try:
             image_items = extract_images(raw_item) if isinstance(raw_item, dict) else [image_data]
         except HTTPException:
@@ -12264,7 +12297,7 @@ async def build_online_image_result(payload: OnlineImageRequest):
         "provider_name": provider.get("name") or provider["id"],
         "task_id": extract_task_id(raw) if isinstance(raw, dict) else None,
         "request_id": raw.get("id") if isinstance(raw, dict) else None,
-        "params": {"provider_id": provider["id"], "model": model, "size": payload.size, "quality": payload.quality, "n": count, "reference_images": refs},
+        "params": {"provider_id": provider["id"], "model": model, "size": payload.size, "quality": payload.quality, "temperature": normalize_image_temperature(payload.temperature), "n": count, "reference_images": refs},
         "raw_usage": raw.get("usage") if isinstance(raw, dict) else None,
     }
     save_to_history(result)
@@ -12510,6 +12543,10 @@ def build_image_param_fields(engine: str, provider: dict, model: str):
                 {"value": "high", "label": "高"},
             ],
             "default": "auto",
+        })
+        fields.append({
+            "key": "temperature", "type": "float", "label": "温度", "control": "slider",
+            "min": 0, "max": 2, "step": 0.1, "default": 0.7,
         })
     fields.append(count_field)
     fields.append(refs_field)
@@ -14831,7 +14868,7 @@ async def chat(payload: ChatRequest, request: Request, x_user_id: str = Header(d
         model = selected_model(payload.image_model or payload.model, default_model)
         image_size = chat_prompt_size_override(payload.message, payload.size) or payload.size
         try:
-            image_data, raw = await generate_ai_image(payload.message, image_size, payload.quality, model, image_refs, provider["id"])
+            image_data, raw = await generate_ai_image(payload.message, image_size, payload.quality, model, image_refs, provider["id"], payload.temperature)
             local_url = await save_ai_image_to_output(image_data, prefix="chat_")
         except httpx.HTTPStatusError as exc:
             text = exc.response.text or ""
@@ -14977,7 +15014,7 @@ async def chat_agent(payload: ChatRequest, request: Request, x_user_id: str = He
         raw_items = []
         try:
             for item_prompt in prompts:
-                image_data, raw = await generate_ai_image(item_prompt, image_size, payload.quality, model, tool_refs, image_provider["id"])
+                image_data, raw = await generate_ai_image(item_prompt, image_size, payload.quality, model, tool_refs, image_provider["id"], payload.temperature)
                 local_urls.append(await save_ai_image_to_output(image_data, prefix="chat_"))
                 raw_items.append(raw)
         except httpx.HTTPStatusError as exc:

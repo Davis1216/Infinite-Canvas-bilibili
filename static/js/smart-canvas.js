@@ -312,6 +312,7 @@ let settings = {
     customWidth:'',
     customHeight:'',
     quality:'auto',
+    temperature:0.7,
     count:1,
     videoProvider:'',
     videoModel:'',
@@ -662,8 +663,17 @@ function isGptImageAutoSizeModel(model){
         || compact.startsWith('gptimage2')
         || compact.endsWith('gptimage2');
 }
-function defaultSmartApiResolution(model){
-    return isGptImageAutoSizeModel(model) ? 'auto' : '1k';
+function providerAllowsAutoImageSize(providerId){
+    const provider = apiProviderById(providerId || '');
+    const id = String(provider?.id || '').trim().toLowerCase();
+    const base = String(provider?.base_url || '').trim().toLowerCase();
+    return id === 'comfly' || id === 'openai' || base.includes('api.openai.com');
+}
+function smartSettingsAllowAutoSize(source=settings){
+    return isGptImageAutoSizeModel(source?.model) && providerAllowsAutoImageSize(source?.provider_id);
+}
+function defaultSmartApiResolution(model, providerId=''){
+    return isGptImageAutoSizeModel(model) && providerAllowsAutoImageSize(providerId || settings.provider_id) ? 'auto' : '1k';
 }
 function mediaItemForStorage(item){
     if(!item || typeof item !== 'object') return item;
@@ -2397,7 +2407,7 @@ function sanitizeSmartApiSelection(target=settings){
         if(models.length && !models.includes(target.model)) target.model = models[0] || '';
     }
     if((target.engine || 'api') === 'api' && (target.apiKind || 'image') !== 'video'){
-        const allowAuto = isGptImageAutoSizeModel(target.model);
+        const allowAuto = isGptImageAutoSizeModel(target.model) && providerAllowsAutoImageSize(target.provider_id);
         if(!target.resolution) target.resolution = allowAuto ? 'auto' : '1k';
         if(!allowAuto && target.resolution === 'auto') target.resolution = '1k';
     }
@@ -2564,7 +2574,7 @@ function apiImageSize(ratioValue, resolutionValue, customRatioValue='', customSi
 function normalizeApiSizeSettings(prefix=''){
     const ratioKey = prefix ? `${prefix}Ratio` : 'ratio';
     const resKey = prefix ? `${prefix}Resolution` : 'resolution';
-    const allowAuto = !prefix && settings.engine === 'api' && settings.apiKind !== 'video' && isGptImageAutoSizeModel(settings.model);
+    const allowAuto = !prefix && settings.engine === 'api' && settings.apiKind !== 'video' && smartSettingsAllowAutoSize(settings);
     if(!settings[resKey]) settings[resKey] = allowAuto ? 'auto' : '1k';
     if(!allowAuto && settings[resKey] === 'auto') settings[resKey] = '1k';
     if(settings[resKey] === 'auto' && !settings[ratioKey]) settings[ratioKey] = 'square';
@@ -2677,6 +2687,7 @@ function renderApiParams(){
         ${renderModelControl(models)}
         ${renderSizePickerControl('', true)}
         ${renderQualityControl()}
+        ${renderTemperatureControl()}
         ${renderCountVisualControl()}
     `;
 }
@@ -2714,6 +2725,7 @@ function renderVolcengineParams(){
         ${renderModelControl(models)}
         ${renderSizePickerControl('', true)}
         ${renderQualityControl()}
+        ${renderTemperatureControl()}
         ${renderCountVisualControl()}
     `;
 }
@@ -2897,7 +2909,7 @@ function renderSizeControls(prefix='', includeSource=false){
     ];
     const resolutionOptions = (!prefix && settings.engine === 'api') ? ['auto','1k','2k','4k','custom'] : ['1k','2k','4k','custom'];
     return `<select data-param="${resKey}">
-            ${resolutionOptions.map(v => optionHtml(v, v === 'auto' ? '自动' : (v === 'custom' ? (tr('canvas.custom') || '自定义') : v.toUpperCase()), settings[resKey] || (prefix ? '1k' : defaultSmartApiResolution(settings.model)))).join('')}
+            ${resolutionOptions.map(v => optionHtml(v, v === 'auto' ? '自动' : (v === 'custom' ? (tr('canvas.custom') || '自定义') : v.toUpperCase()), settings[resKey] || (prefix ? '1k' : defaultSmartApiResolution(settings.model, settings.provider_id)))).join('')}
         </select>
         <select data-param="${ratioKey}" ${settings[resKey] === 'custom' || settings[resKey] === 'auto' ? 'disabled' : ''}>
             ${ratios.map(([v,l]) => `<option value="${escapeHtml(v)}" ${v === (settings[ratioKey] || 'square') ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}
@@ -2957,7 +2969,7 @@ function applySourceRatioToSettings(prefix=''){
 function resolutionLabel(prefix=''){
     const resKey = prefix ? `${prefix}Resolution` : 'resolution';
     const sizeKey = prefix ? `${prefix}CustomSize` : 'customSize';
-    const value = settings[resKey] || ((!prefix && settings.engine === 'api') ? defaultSmartApiResolution(settings.model) : '1k');
+    const value = settings[resKey] || ((!prefix && settings.engine === 'api') ? defaultSmartApiResolution(settings.model, settings.provider_id) : '1k');
     if(value === 'auto') return '自动';
     return value === 'custom' ? (settings[sizeKey] || tr('smart.custom')) : value.toUpperCase();
 }
@@ -3054,8 +3066,8 @@ function renderRatioControl(prefix='', includeSource=false){
 function renderResolutionControl(prefix=''){
     const resKey = prefix ? `${prefix}Resolution` : 'resolution';
     const options = (!prefix && settings.engine === 'api') ? ['auto','1k','2k','4k','custom'] : ['1k','2k','4k','custom'];
-    const current = settings[resKey] || ((!prefix && settings.engine === 'api') ? defaultSmartApiResolution(settings.model) : '1k');
-    const allowAuto = !prefix && settings.engine === 'api' && settings.apiKind !== 'video' && isGptImageAutoSizeModel(settings.model);
+    const current = settings[resKey] || ((!prefix && settings.engine === 'api') ? defaultSmartApiResolution(settings.model, settings.provider_id) : '1k');
+    const allowAuto = !prefix && settings.engine === 'api' && settings.apiKind !== 'video' && smartSettingsAllowAutoSize(settings);
     return `<div class="smart-control resolution-control">
         <button class="smart-pill" type="button"><i data-lucide="monitor"></i><span>${escapeHtml(resolutionLabel(prefix))}</span></button>
         <div class="smart-popover compact-popover">
@@ -3069,13 +3081,13 @@ function renderResolutionControl(prefix=''){
 function sizePickerScope(prefix=''){
     const resKey = prefix ? `${prefix}Resolution` : 'resolution';
     const ratioKey = prefix ? `${prefix}Ratio` : 'ratio';
-    const value = settings[resKey] || ((!prefix && settings.engine === 'api') ? defaultSmartApiResolution(settings.model) : '1k');
+    const value = settings[resKey] || ((!prefix && settings.engine === 'api') ? defaultSmartApiResolution(settings.model, settings.provider_id) : '1k');
     if(value === 'auto') return 'auto';
     if(value === 'custom' || settings[ratioKey] === 'custom') return 'custom';
     return 'preset';
 }
 function sizePickerDefaultResolution(prefix=''){
-    const value = (!prefix && settings.engine === 'api') ? defaultSmartApiResolution(settings.model) : '1k';
+    const value = (!prefix && settings.engine === 'api') ? defaultSmartApiResolution(settings.model, settings.provider_id) : '1k';
     return value === 'auto' ? '1k' : value;
 }
 function sizePickerLabel(prefix=''){
@@ -3098,9 +3110,9 @@ function renderSizePickerControl(prefix='', includeSource=false){
     const resKey = prefix ? `${prefix}Resolution` : 'resolution';
     const scope = sizePickerScope(prefix);
     const options = (!prefix && settings.engine === 'api') ? ['auto','1k','2k','4k'] : ['1k','2k','4k'];
-    const currentRes = settings[resKey] || ((!prefix && settings.engine === 'api') ? defaultSmartApiResolution(settings.model) : '1k');
+    const currentRes = settings[resKey] || ((!prefix && settings.engine === 'api') ? defaultSmartApiResolution(settings.model, settings.provider_id) : '1k');
     const currentRatio = settings[ratioKey] || 'square';
-    const allowAuto = !prefix && settings.engine === 'api' && settings.apiKind !== 'video' && isGptImageAutoSizeModel(settings.model);
+    const allowAuto = !prefix && settings.engine === 'api' && settings.apiKind !== 'video' && smartSettingsAllowAutoSize(settings);
     const ratios = [
         ['square','1:1','正方形'], ['portrait','2:3','竖图'], ['landscape','3:2','横图'], ['portrait43','3:4','竖图'], ['landscape43','4:3','横图'],
         ['story','9:16','竖屏'], ['wide','16:9','宽屏'], ['ultrawide','21:9','超宽'], ['ultratall','9:21','超竖'],
@@ -3171,6 +3183,25 @@ function renderQualityControl(){
             <div class="smart-popover-title">${escapeHtml(tr('smart.quality'))}</div>
             <div class="seg-row">
                 ${Object.entries(labels).map(([k, l]) => `<button type="button" class="${k === value ? 'active' : ''}" data-smart-param="quality" data-smart-value="${escapeHtml(k)}">${escapeHtml(l)}</button>`).join('')}
+            </div>
+        </div>
+    </div>`;
+}
+function normalizedImageTemperature(value){
+    const number = Number(value);
+    if(!Number.isFinite(number)) return 0.7;
+    return Math.max(0, Math.min(2, number));
+}
+function renderTemperatureControl(){
+    const value = normalizedImageTemperature(settings.temperature);
+    settings.temperature = value;
+    return `<div class="smart-control temperature-control">
+        <button class="smart-pill" type="button"><i data-lucide="thermometer"></i><span>温度 ${value.toFixed(1)}</span></button>
+        <div class="smart-popover compact-popover" style="min-width:190px">
+            <div class="smart-popover-title">温度</div>
+            <div class="num-compact">
+                <input type="range" min="0" max="2" step="0.1" data-param="temperature" value="${value}">
+                <input type="number" min="0" max="2" step="0.1" data-param="temperature" value="${value.toFixed(1)}">
             </div>
         </div>
     </div>`;
@@ -3748,9 +3779,10 @@ function smartComfyRandomValue(field){
     return Math.floor(value);
 }
 function setDynamicSetting(key, value){
-    const numericKeys = new Set(['count','width','height','videoDuration','enhanceStrength','enhanceUpscaleRes','editUpscaleRes','customRatioWidth','customRatioHeight','customWidth','customHeight','msCustomRatioWidth','msCustomRatioHeight','msCustomWidth','msCustomHeight']);
-    const layoutKeys = new Set(['provider_id','model','resolution','ratio','msgenModel','msCustomModel','msResolution','msRatio','videoProvider','videoModel','videoAspect','videoResolution','comfyMode','comfyWorkflow','quality','count','enhanceUpscaleRes','editUpscaleRes','rhConfigKey','rhPayment','rhInstanceType']);
+    const numericKeys = new Set(['count','width','height','temperature','videoDuration','enhanceStrength','enhanceUpscaleRes','editUpscaleRes','customRatioWidth','customRatioHeight','customWidth','customHeight','msCustomRatioWidth','msCustomRatioHeight','msCustomWidth','msCustomHeight']);
+    const layoutKeys = new Set(['provider_id','model','resolution','ratio','msgenModel','msCustomModel','msResolution','msRatio','videoProvider','videoModel','videoAspect','videoResolution','comfyMode','comfyWorkflow','quality','temperature','count','enhanceUpscaleRes','editUpscaleRes','rhConfigKey','rhPayment','rhInstanceType']);
     settings[key] = numericKeys.has(key) && value !== '' ? Number(value) : value;
+    if(key === 'temperature') settings.temperature = normalizedImageTemperature(settings.temperature);
     if(key === 'provider_id') settings.model = '';
     if(key === 'videoProvider') settings.videoModel = '';
     if(key === 'videoMultimodal') settings._videoMultimodalUserSet = true;
@@ -3844,7 +3876,7 @@ function bindDynamicParams(){
             const scope = btn.dataset.sizeScope;
             const resKey = prefix ? `${prefix}Resolution` : 'resolution';
             const ratioKey = prefix ? `${prefix}Ratio` : 'ratio';
-            const allowAuto = !prefix && settings.engine === 'api' && settings.apiKind !== 'video' && isGptImageAutoSizeModel(settings.model);
+            const allowAuto = !prefix && settings.engine === 'api' && settings.apiKind !== 'video' && smartSettingsAllowAutoSize(settings);
             if(scope === 'auto'){
                 if(!allowAuto) return;
                 settings[resKey] = 'auto';
@@ -6631,7 +6663,7 @@ function smartRunRequestMeta(run){
     if(s.engine === 'comfy') return {workflow_json:s.comfyWorkflow || '', mode:s.comfyMode || 'text'};
     if(s.engine === 'modelscope') return {backend:'Modelscope', model:s.msgenModel || '', custom_model:s.msCustomModel || ''};
     if(run?.kind === 'video') return {provider_id:s.videoProvider || '', model:s.videoModel || '', duration:s.videoDuration || '', aspect_ratio:s.videoAspect || '', resolution:s.videoResolution || ''};
-    return {provider_id:s.provider_id || '', model:s.model || '', size:run?.size || '', quality:s.quality || '', n:s.count || 1};
+    return {provider_id:s.provider_id || '', model:s.model || '', size:run?.size || '', quality:s.quality || '', temperature:normalizedImageTemperature(s.temperature), n:s.count || 1};
 }
 function smartRunSnapshot(node, prompt, refs=[], kind='image'){
     const settingsSnapshot = cloneSmartSettings(settings);
@@ -11821,9 +11853,10 @@ async function handleSmartImageDropPayload(payload, targetId='', opts={}){
     }
 }
 function sizeForRun(sourceSettings=settings){
-    const fallbackResolution = sourceSettings.engine === 'api' && isGptImageAutoSizeModel(sourceSettings.model)
+    const fallbackResolution = sourceSettings.engine === 'api' && smartSettingsAllowAutoSize(sourceSettings)
         ? 'auto'
         : '1k';
+    if(sourceSettings.resolution === 'custom') return String(sourceSettings.customSize || '').trim() || '1024x1024';
     return apiImageSize(sourceSettings.ratio || 'square', sourceSettings.resolution || fallbackResolution, sourceSettings.customRatio || '', sourceSettings.customSize || '') || '1024x1024';
 }
 function expectedOutputSize(){
@@ -14466,7 +14499,7 @@ function comfyFieldKind(field){
 async function runApiGeneration(prompt, refs, runSettings=settings){
     if(!runSettings.provider_id || !runSettings.model) throw new Error(tr('smart.errNoApiModel'));
     const count = Math.max(1, Math.min(8, Number(runSettings.count || 1)));
-    const payload = {prompt, provider_id:runSettings.provider_id, model:runSettings.model, size:sizeForRun(runSettings), quality:runSettings.quality || 'auto', n:1, reference_images:imageRefsOnly(refs).slice(0, SMART_REFERENCE_IMAGE_MAX)};
+    const payload = {prompt, provider_id:runSettings.provider_id, model:runSettings.model, size:sizeForRun(runSettings), quality:runSettings.quality || 'auto', temperature:normalizedImageTemperature(runSettings.temperature), n:1, reference_images:imageRefsOnly(refs).slice(0, SMART_REFERENCE_IMAGE_MAX)};
     const tasks = await Promise.all(Array.from({length:count}, () => fetch('/api/canvas-image-tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}).then(async r => {
         if(!r.ok) throw new Error(await r.text());
         return r.json();
