@@ -17,14 +17,15 @@
             } catch(e) {}
         })();
     </script>
-    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.3.1782696751"></script>
-    <script src="/static/vendor/js/lucide.js?v=2026.07.3.1782696749"></script>
-    <script src="/static/js/theme.js?v=2026.07.3.1783117645"></script>
-    <script src="/static/js/i18n.js?v=2026.07.3.1783116068"></script>
-    <script src="/static/js/image-preview.js?v=2026.07.3.1782696713"></script>
-    <script src="/static/js/history-bulk-manager.js?v=2026.07.3.1782696703"></script>
+    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/image-preview.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/tool-api-mode.js?v=2026.07.4.2.1783512835"></script>
+    <script src="/static/js/history-bulk-manager.js?v=2026.07.4.2.1783154122"></script>
     <style>
-        @import url('/static/vendor/css/fonts.css?v=2026.07.3.1782696732');
+        @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783154122');
 
         :root {
             --accent: #111827;
@@ -267,7 +268,7 @@
             letter-spacing: .04em;
         }
     </style>
-    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.3.1782696682">
+    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
 </head>
 
 <body class="selection:bg-black selection:text-white">
@@ -315,6 +316,17 @@
 
                 <section class="space-y-10">
                     <h3 class="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400">02. <span data-i18n="studio.parameters">Parameters</span></h3>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400">Engine</span>
+                            <div class="flex bg-white border border-gray-100 rounded-2xl p-1 shadow-sm">
+                                <button id="engineLocalBtn" onclick="setEngine('local')" class="px-4 py-2 rounded-xl text-[10px] font-black uppercase bg-black text-white">Local</button>
+                                <button id="engineApiBtn" onclick="setEngine('api')" class="px-4 py-2 rounded-xl text-[10px] font-black uppercase text-gray-400">API</button>
+                            </div>
+                        </div>
+                        <div id="apiControls" class="hidden"></div>
+                    </div>
 
                     <!-- Local Controls -->
                     <div id="localControls" class="space-y-10">
@@ -470,14 +482,41 @@
         localStorage.setItem("client_id", CLIENT_ID);
 
         let uploadedPath = "";
+        let uploadedAiRef = null;
         let currentResult = null;
         let currentUpscaleFactor = 2048;
+        let currentEngine = 'local';
+        let apiControlsState = null;
 
         const dropzone = document.getElementById('dropzone');
         const fileInput = document.getElementById('fileInput');
         const previewImg = document.getElementById('previewImg');
         const slider = document.getElementById('strengthSlider');
         const valDisplay = document.getElementById('strengthVal');
+
+        function ensureApiControls(){
+            if(apiControlsState) return apiControlsState;
+            const target = document.getElementById('apiControls');
+            apiControlsState = StudioToolApi.initControls(target, { temperature:0.7 }).catch(err => {
+                target.innerHTML = `<div class="tool-api-empty">${err.message}</div>`;
+                console.error(err);
+                return null;
+            });
+            return apiControlsState;
+        }
+
+        function setEngine(mode){
+            currentEngine = mode === 'api' ? 'api' : 'local';
+            document.getElementById('engineLocalBtn').className = currentEngine === 'local'
+                ? 'px-4 py-2 rounded-xl text-[10px] font-black uppercase bg-black text-white'
+                : 'px-4 py-2 rounded-xl text-[10px] font-black uppercase text-gray-400';
+            document.getElementById('engineApiBtn').className = currentEngine === 'api'
+                ? 'px-4 py-2 rounded-xl text-[10px] font-black uppercase bg-black text-white'
+                : 'px-4 py-2 rounded-xl text-[10px] font-black uppercase text-gray-400';
+            document.getElementById('apiControls').classList.toggle('hidden', currentEngine !== 'api');
+            document.getElementById('localControls').classList.toggle('hidden', currentEngine === 'api');
+            if(currentEngine === 'api') ensureApiControls();
+        }
 
         function setUpscaleFactor(factor) {
             currentUpscaleFactor = factor;
@@ -560,15 +599,26 @@
 
             const formData = new FormData();
             formData.append('files', file);
+            uploadedAiRef = null;
             try {
                 const res = await fetch('/api/upload', { method: 'POST', body: formData });
                 const data = await res.json();
                 uploadedPath = data.files[0].comfy_name;
+                try {
+                    uploadedAiRef = await StudioToolApi.uploadReference(file);
+                } catch (apiErr) {
+                    console.warn('AI reference upload failed', apiErr);
+                }
                 // Enable button after successful upload
                 btn.disabled = false;
                 btnText.innerText = tr('studio.beginRemaster');
             } catch (err) {
                 console.error("Upload error");
+                try {
+                    uploadedAiRef = await StudioToolApi.uploadReference(file);
+                } catch (apiErr) {
+                    console.warn('AI reference upload failed', apiErr);
+                }
                 btnText.innerText = tr('studio.uploadFailed');
                 btn.disabled = false;
             }
@@ -587,6 +637,10 @@
         }
 
         async function handleGenerate() {
+            if (currentEngine === 'api') {
+                await handleApiGenerate();
+                return;
+            }
             if (!uploadedPath) {
                 const dropzone = document.getElementById('dropzone');
                 dropzone.style.transition = "0.2s";
@@ -685,6 +739,63 @@
                 document.getElementById('loadingState').classList.add('hidden');
                 alert(`Error at ${debugStep}: ${error.message || JSON.stringify(error)}`);
             } finally {
+                btn.disabled = false;
+                btn.style.backgroundColor = '';
+                btn.innerHTML = `<i data-lucide="zap" class="w-4 h-4 text-yellow-400"></i><span id="btnText">Begin Remastering</span>`;
+                lucide.createIcons();
+            }
+        }
+
+        async function handleApiGenerate() {
+            if (!uploadedAiRef) {
+                const dropzone = document.getElementById('dropzone');
+                dropzone.style.transition = "0.2s";
+                dropzone.style.borderColor = "#ef4444";
+                dropzone.style.transform = "scale(0.98)";
+                setTimeout(() => { dropzone.style.borderColor = ""; dropzone.style.transform = "scale(1)"; }, 300);
+                return;
+            }
+            const btn = document.getElementById('genBtn');
+            btn.disabled = true;
+            btn.style.backgroundColor = '#333';
+            btn.innerHTML = `<i data-lucide="plug" class="w-4 h-4 text-yellow-400 animate-pulse"></i><span class="tracking-[0.4em] text-[11px] uppercase">${tr('studio.processing')}</span>`;
+            lucide.createIcons();
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('outputImg').classList.add('hidden');
+            document.getElementById('loadingState').classList.remove('hidden');
+            try {
+                await ensureApiControls();
+                const selected = StudioToolApi.selection('apiControls');
+                const result = await StudioToolApi.generateImage({
+                    prompt:`Enhance clarity, texture, details and visual quality while preserving the original subject, composition and identity. Refinement strength: ${parseFloat(slider.value).toFixed(2)}.`,
+                    provider_id:selected.provider_id,
+                    model:selected.model,
+                    temperature:selected.temperature,
+                    reference_images:[uploadedAiRef]
+                });
+                const images = (result.images || []).map(item => item.url || item).filter(Boolean);
+                if(!images.length) throw new Error("API did not return images");
+                const finalData = {
+                    images,
+                    timestamp: Date.now(),
+                    prompt: "API enhance",
+                    type: "enhance",
+                    model: selected.model,
+                    params: { provider_id:selected.provider_id, model:selected.model, temperature:selected.temperature }
+                };
+                currentResult = finalData;
+                const out = document.getElementById('outputImg');
+                out.src = images[0];
+                out.classList.remove('hidden');
+                document.getElementById('downloadBtn').classList.remove('hidden');
+                document.getElementById('downloadBtn').href = images[0];
+                renderImageCard(finalData, true);
+            } catch (error) {
+                console.error("API enhance error", error);
+                document.getElementById('emptyState').classList.remove('hidden');
+                alert(error.message || "API enhance failed");
+            } finally {
+                document.getElementById('loadingState').classList.add('hidden');
                 btn.disabled = false;
                 btn.style.backgroundColor = '';
                 btn.innerHTML = `<i data-lucide="zap" class="w-4 h-4 text-yellow-400"></i><span id="btnText">Begin Remastering</span>`;

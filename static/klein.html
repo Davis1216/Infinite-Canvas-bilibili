@@ -17,14 +17,15 @@
             } catch(e) {}
         })();
     </script>
-    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.3.1782696751"></script>
-    <script src="/static/vendor/js/lucide.js?v=2026.07.3.1782696749"></script>
-    <script src="/static/js/theme.js?v=2026.07.3.1783117645"></script>
-    <script src="/static/js/i18n.js?v=2026.07.3.1783116068"></script>
-    <script src="/static/js/image-preview.js?v=2026.07.3.1782696713"></script>
-    <script src="/static/js/history-bulk-manager.js?v=2026.07.3.1782696703"></script>
+    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/image-preview.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/tool-api-mode.js?v=2026.07.4.2.1783512835"></script>
+    <script src="/static/js/history-bulk-manager.js?v=2026.07.4.2.1783154122"></script>
     <style>
-        @import url('/static/vendor/css/fonts.css?v=2026.07.3.1782696732');
+        @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783154122');
 
         :root {
             --accent: #111827;
@@ -112,7 +113,7 @@
             border-radius: 999px;
             padding: 3px;
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(3, 1fr);
             gap: 2px;
         }
         .engine-btn {
@@ -189,7 +190,7 @@
         html.studio-theme-dark .lora-track { background: #3a465a; }
         html.studio-theme-dark .lora-track.on { background: #3b82f6; }
     </style>
-    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.3.1782696682">
+    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
 </head>
 
 <body class="antialiased transition-colors duration-300">
@@ -219,35 +220,7 @@
                         <span class="text-[10px] font-black uppercase tracking-widest" data-i18n="studio.referenceLayers">Reference Layers</span>
                         <span id="cloudImgNote" class="hidden ml-auto text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full" data-i18n="studio.cloudUsesMain">Cloud uses Main image</span>
                     </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <div id="drop-zone-1" onclick="document.getElementById('file1').click()"
-                            class="upload-item group aspect-square rounded-2xl flex flex-col items-center justify-center cursor-pointer">
-                            <input type="file" id="file1" class="hidden" onchange="handleFile(this.files[0], 1)">
-                            <i data-lucide="plus" class="w-5 h-5 text-gray-300 group-hover:text-black transition-colors"></i>
-                            <span class="text-[9px] mt-2 font-bold text-gray-400 uppercase">Main</span>
-                            <img id="prev1" class="preview-img hidden">
-                            <button id="del1" onclick="clearSlot(1, event)"
-                                class="hidden absolute top-2 right-2 w-6 h-6 bg-white/90 rounded-full shadow-sm z-10 flex items-center justify-center text-xs">×</button>
-                        </div>
-                        <div id="drop-zone-2" onclick="document.getElementById('file2').click()"
-                            class="upload-item group aspect-square rounded-2xl flex flex-col items-center justify-center cursor-pointer">
-                            <input type="file" id="file2" class="hidden" onchange="handleFile(this.files[0], 2)">
-                            <i data-lucide="plus" class="w-5 h-5 text-gray-300 group-hover:text-black transition-colors"></i>
-                            <span class="text-[9px] mt-2 font-bold text-gray-400 uppercase">Aux A</span>
-                            <img id="prev2" class="preview-img hidden">
-                            <button id="del2" onclick="clearSlot(2, event)"
-                                class="hidden absolute top-2 right-2 w-6 h-6 bg-white/90 rounded-full shadow-sm z-10 flex items-center justify-center text-xs">×</button>
-                        </div>
-                        <div id="drop-zone-3" onclick="document.getElementById('file3').click()"
-                            class="upload-item group aspect-square rounded-2xl flex flex-col items-center justify-center cursor-pointer">
-                            <input type="file" id="file3" class="hidden" onchange="handleFile(this.files[0], 3)">
-                            <i data-lucide="plus" class="w-5 h-5 text-gray-300 group-hover:text-black transition-colors"></i>
-                            <span class="text-[9px] mt-2 font-bold text-gray-400 uppercase">Aux B</span>
-                            <img id="prev3" class="preview-img hidden">
-                            <button id="del3" onclick="clearSlot(3, event)"
-                                class="hidden absolute top-2 right-2 w-6 h-6 bg-white/90 rounded-full shadow-sm z-10 flex items-center justify-center text-xs">×</button>
-                        </div>
-                    </div>
+                    <div id="referenceGrid" class="grid grid-cols-3 gap-4"></div>
                 </section>
 
                 <div class="engine-panel">
@@ -262,11 +235,15 @@
                         <button id="cloudBtn" class="engine-btn" onclick="setEngine('cloud')">
                             <i data-lucide="cloud" class="w-3 h-3"></i>ModelScope
                         </button>
+                        <button id="apiBtn" class="engine-btn" onclick="setEngine('api')">
+                            <i data-lucide="plug" class="w-3 h-3"></i>API
+                        </button>
                     </div>
                     <div id="cloudStatusBar" class="cloud-status">
                         <div class="cloud-dot"></div>
                         <span id="cloudStatusText" data-i18n="studio.connecting">Connecting...</span>
                     </div>
+                    <div id="apiControls" class="hidden"></div>
                     <div id="loraSection" class="hidden flex-col gap-3 pt-2 border-t border-gray-100">
                         <label class="flex items-center gap-3 cursor-pointer select-none" onclick="toggleLora()">
                             <div class="relative w-9 h-5 flex-shrink-0">
@@ -401,8 +378,11 @@
         let CLIENT_ID = localStorage.getItem(CLIENT_ID_KEY) || generateUUID();
         localStorage.setItem(CLIENT_ID_KEY, CLIENT_ID);
 
-        let uploadedNames = { 1: "", 2: "", 3: "" };
-        let base64Images = { 1: "", 2: "", 3: "" };
+        const REF_SLOT_COUNT = 6;
+        const REF_SLOT_LABELS = ['Main', 'Aux A', 'Aux B', 'Aux C', 'Aux D', 'Aux E'];
+        let uploadedNames = {};
+        let base64Images = {};
+        let aiRefs = {};
         let allHistory = [];
         let currentResult = null;
         let currentLightboxData = null;
@@ -411,13 +391,59 @@
         let isLoading = false;
         let engine = 'local';
         let loraEnabled = false;
+        let apiControlsState = null;
+
+        function slotIds(){ return Array.from({length: REF_SLOT_COUNT}, (_, index) => index + 1); }
+        function resetSlotState(){
+            uploadedNames = {};
+            base64Images = {};
+            aiRefs = {};
+            slotIds().forEach(id => {
+                uploadedNames[id] = "";
+                base64Images[id] = "";
+                aiRefs[id] = null;
+            });
+        }
+
+        function renderReferenceSlots(){
+            const grid = document.getElementById('referenceGrid');
+            grid.innerHTML = slotIds().map(id => `
+                <div id="drop-zone-${id}" onclick="document.getElementById('file${id}').click()"
+                    class="upload-item group aspect-square rounded-2xl flex flex-col items-center justify-center cursor-pointer">
+                    <input type="file" id="file${id}" class="hidden" accept="image/*" onchange="handleFile(this.files[0], ${id}); this.value='';">
+                    <i data-lucide="plus" class="w-5 h-5 text-gray-300 group-hover:text-black transition-colors"></i>
+                    <span class="text-[9px] mt-2 font-bold text-gray-400 uppercase">${REF_SLOT_LABELS[id - 1]}</span>
+                    <img id="prev${id}" class="preview-img hidden">
+                    <button id="del${id}" onclick="clearSlot(${id}, event)"
+                        class="hidden absolute top-2 right-2 w-6 h-6 bg-white/90 rounded-full shadow-sm z-10 flex items-center justify-center text-xs">x</button>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        resetSlotState();
+        renderReferenceSlots();
+
+        function ensureApiControls(){
+            if(apiControlsState) return apiControlsState;
+            const target = document.getElementById('apiControls');
+            apiControlsState = StudioToolApi.initControls(target, { temperature:0.7 }).catch(err => {
+                target.innerHTML = `<div class="tool-api-empty">${err.message}</div>`;
+                console.error(err);
+                return null;
+            });
+            return apiControlsState;
+        }
 
         // 引擎切换
         function setEngine(mode) {
             engine = mode;
             document.getElementById('localBtn').classList.toggle('active', mode === 'local');
             document.getElementById('cloudBtn').classList.toggle('active', mode === 'cloud');
-            document.getElementById('cloudImgNote').classList.toggle('hidden', mode === 'local');
+            document.getElementById('apiBtn').classList.toggle('active', mode === 'api');
+            const note = document.getElementById('cloudImgNote');
+            note.textContent = mode === 'api' ? 'API uses up to 6 images' : tr('studio.cloudUsesMain');
+            note.classList.toggle('hidden', mode === 'local');
             const loraSection = document.getElementById('loraSection');
             if (mode === 'cloud') {
                 loraSection.classList.remove('hidden');
@@ -426,6 +452,8 @@
                 loraSection.classList.add('hidden');
                 loraSection.classList.remove('flex');
             }
+            document.getElementById('apiControls').classList.toggle('hidden', mode !== 'api');
+            if (mode === 'api') ensureApiControls();
         }
 
         function toggleLora() {
@@ -446,7 +474,7 @@
 
         // 拖拽上传
         let hoveredSlot = null;
-        [1, 2, 3].forEach(id => {
+        slotIds().forEach(id => {
             const zone = document.getElementById(`drop-zone-${id}`);
             if (!zone) return;
             zone.ondragover = (e) => { e.preventDefault(); zone.classList.add('drag-over'); };
@@ -482,11 +510,17 @@
             // Also upload to ComfyUI for local mode
             const formData = new FormData();
             formData.append('files', file);
+            aiRefs[index] = null;
             try {
                 const res = await fetch('/api/upload', { method: 'POST', body: formData });
                 const data = await res.json();
                 uploadedNames[index] = data.files[0].comfy_name;
             } catch (e) { uploadedNames[index] = file.name; }
+            try {
+                aiRefs[index] = await StudioToolApi.uploadReference(file);
+            } catch (e) {
+                console.warn('AI reference upload failed', e);
+            }
         }
 
         function clearSlot(index, ev) {
@@ -496,11 +530,14 @@
             document.getElementById(`del${index}`).classList.add("hidden");
             uploadedNames[index] = "";
             base64Images[index] = "";
+            aiRefs[index] = null;
         }
 
         async function submitWorkflow() {
             if (engine === 'cloud') {
                 await submitCloud();
+            } else if (engine === 'api') {
+                await submitApi();
             } else {
                 await submitLocal();
             }
@@ -556,6 +593,69 @@
                 }
             } catch (err) {
                 alert("Generation failed: " + err.message);
+                placeholder.classList.remove('hidden');
+            } finally {
+                loader.classList.add('hidden');
+                btn.disabled = false;
+                btn.style.backgroundColor = '';
+                btn.innerHTML = `<i data-lucide="zap" class="w-4 h-4 text-yellow-400"></i><span class="tracking-[0.3em] text-[11px] uppercase">${tr('studio.executeSynthesis')}</span>`;
+                lucide.createIcons();
+            }
+        }
+
+        async function submitApi() {
+            const prompt = document.getElementById('promptInput').value.trim();
+            if (!prompt) { alert("Please enter a prompt"); return; }
+            const refs = slotIds().map(id => aiRefs[id]).filter(Boolean).slice(0, REF_SLOT_COUNT);
+            if (!refs.length) { alert("Please upload at least one reference image"); return; }
+
+            const btn = document.getElementById('genBtn');
+            const loader = document.getElementById('loader');
+            const placeholder = document.getElementById('placeholder');
+            const outputImg = document.getElementById('outputImg');
+            const downloadBtn = document.getElementById('downloadBtn');
+
+            btn.disabled = true;
+            btn.style.backgroundColor = '#333';
+            btn.innerHTML = `<i data-lucide="plug" class="w-4 h-4 text-yellow-400 animate-pulse"></i><span class="tracking-[0.3em] text-[11px] uppercase">${tr('studio.cloudProcessing')}</span>`;
+            lucide.createIcons();
+            placeholder.classList.add('hidden');
+            loader.classList.remove('hidden');
+            setCloudStatus('Processing with custom API...');
+
+            try {
+                await ensureApiControls();
+                const selected = StudioToolApi.selection('apiControls');
+                const mainPrev = document.getElementById('prev1');
+                const targetSize = computeMsSize(mainPrev && mainPrev.naturalWidth, mainPrev && mainPrev.naturalHeight);
+                const result = await StudioToolApi.generateImage({
+                    prompt,
+                    provider_id:selected.provider_id,
+                    model:selected.model,
+                    size:`${targetSize.width}x${targetSize.height}`,
+                    temperature:selected.temperature,
+                    reference_images:refs
+                });
+                const images = (result.images || []).map(item => item.url || item).filter(Boolean);
+                if(!images.length) throw new Error("API did not return images");
+                const resultData = {
+                    prompt,
+                    images,
+                    timestamp: Date.now() / 1000,
+                    type: 'klein',
+                    model: selected.model,
+                    params: { provider_id:selected.provider_id, model:selected.model, temperature:selected.temperature, reference_images:refs }
+                };
+                currentResult = resultData;
+                outputImg.src = images[0];
+                outputImg.classList.remove('hidden');
+                downloadBtn.classList.remove('hidden');
+                downloadBtn.href = images[0];
+                renderImageCard(resultData, true);
+                setCloudStatus('Done!', false);
+            } catch (err) {
+                setCloudStatus(err.message, false);
+                alert("API generation failed: " + err.message);
                 placeholder.classList.remove('hidden');
             } finally {
                 loader.classList.add('hidden');
@@ -786,6 +886,7 @@
                 } else { clearSlot(slotId); }
             };
             setSlot(1, "278"); setSlot(2, "270"); setSlot(3, "292");
+            [4, 5, 6].forEach(id => clearSlot(id));
             closeLightbox();
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }

@@ -16,13 +16,13 @@
             } catch(e) {}
         })();
     </script>
-    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.3.1782696751"></script>
-    <script src="/static/vendor/js/lucide.js?v=2026.07.3.1782696749"></script>
-    <script src="/static/js/theme.js?v=2026.07.3.1783117645"></script>
-    <script src="/static/js/i18n.js?v=2026.07.3.1783116068"></script>
-    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.3.1782696682">
+    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1783154122"></script>
+    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
     <style>
-        @import url('/static/vendor/css/fonts.css?v=2026.07.3.1782696732');
+        @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783154122');
         :root {
             --ease:cubic-bezier(.4,0,.2,1);
             --chat-bg:#eef2f6;
@@ -240,10 +240,10 @@
         .composer-inside-foot { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:12px; overflow:visible; flex:0 0 auto; }
         .left-tools { display:flex; align-items:center; gap:8px; min-width:0; flex-wrap:wrap; overflow:visible; }
         .inline-controls { width:100%; display:flex; align-items:center; gap:8px; min-width:0; flex-wrap:wrap; overflow:visible; }
-        .upload-btn { width:36px; height:36px; border-radius:12px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; background:var(--chat-panel); border:1px solid var(--chat-line); color:var(--chat-muted); transition:background .16s var(--ease), color .16s var(--ease), border-color .16s var(--ease), transform .16s var(--ease); }
+        .upload-btn { position:relative; overflow:hidden; cursor:pointer; width:36px; height:36px; border-radius:12px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; background:var(--chat-panel); border:1px solid var(--chat-line); color:var(--chat-muted); transition:background .16s var(--ease), color .16s var(--ease), border-color .16s var(--ease), transform .16s var(--ease); }
         .upload-btn:hover { background:var(--chat-soft); color:var(--chat-text); border-color:var(--chat-line-2); transform:translateY(-1px); }
         .upload-btn i,.upload-btn svg { width:16px; height:16px; }
-        .file-input { display:none; }
+        .file-input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
         .send-btn { width:42px; height:42px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:var(--chat-strong); color:var(--chat-strong-text); transition:opacity .16s var(--ease), transform .16s var(--ease); flex:0 0 auto; }
         .send-btn:hover { transform:translateY(-1px); }
         .send-btn:disabled { opacity:.45; cursor:not-allowed; }
@@ -508,10 +508,10 @@
                         <div class="composer-inside-foot">
                             <div class="left-tools">
                                 <div class="inline-controls">
-                                    <input id="attachmentInput" class="file-input" type="file" multiple onchange="uploadFiles(this.files); this.value='';">
-                                    <button type="button" class="upload-btn" onclick="document.getElementById('attachmentInput')?.click()" title="上传附件" aria-label="上传附件">
+                                    <label class="upload-btn" title="上传附件" aria-label="上传附件">
+                                        <input id="attachmentInput" class="file-input" type="file" multiple onchange="uploadFiles(this.files); this.value='';">
                                         <i data-lucide="paperclip"></i>
-                                    </button>
+                                    </label>
                                     <div id="modelPicker" class="model-picker">
                                         <button id="modelPickerBtn" class="model-picker-button" onclick="event.stopPropagation();toggleModelPicker()" title="选择平台和模型">
                                             <i data-lucide="boxes"></i>

@@ -17,21 +17,22 @@
             } catch(e) {}
         })();
     </script>
-    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.3.1782696751"></script>
-    <script src="/static/vendor/js/lucide.js?v=2026.07.3.1782696749"></script>
-    <script src="/static/js/theme.js?v=2026.07.3.1783117645"></script>
-    <script src="/static/js/i18n.js?v=2026.07.3.1783116068"></script>
-    <script src="/static/js/image-preview.js?v=2026.07.3.1782696713"></script>
-    <script src="/static/js/history-bulk-manager.js?v=2026.07.3.1782696703"></script>
+    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/image-preview.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/tool-api-mode.js?v=2026.07.4.2.1783512835"></script>
+    <script src="/static/js/history-bulk-manager.js?v=2026.07.4.2.1783154122"></script>
     <script type="importmap">
         {
             "imports": {
-                "three": "/static/vendor/js/three-0.160.0.module.js?v=2026.07.3"
+                "three": "/static/vendor/js/three-0.160.0.module.js?v=2026.07.4.2"
             }
         }
     </script>
     <style>
-        @import url('/static/vendor/css/fonts.css?v=2026.07.3.1782696732');
+        @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783154122');
 
         :root {
             --accent: #111827;
@@ -217,7 +218,7 @@
         .mode-glider {
             position: absolute;
             height: calc(100% - 8px);
-            width: calc(50% - 4px);
+            width: calc(33.333% - 4px);
             background: #fff;
             border-radius: 11px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
@@ -274,7 +275,7 @@
             border-color: #0f141d;
         }
     </style>
-    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.3.1782696682">
+    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
 </head>
 
 <body class="selection:bg-black selection:text-white">
@@ -436,8 +437,14 @@
                             <i data-lucide="cloud" class="w-3 h-3"></i>
                             <span>ModelScope</span>
                         </div>
+                        <div id="modeApi" class="mode-btn flex items-center justify-center gap-1.5"
+                            onclick="switchEngine('api')">
+                            <i data-lucide="plug" class="w-3 h-3"></i>
+                            <span>API</span>
+                        </div>
                         <div id="glider" class="mode-glider"></div>
                     </div>
+                    <div id="apiControls" class="hidden"></div>
 
                     <button id="genBtn" onclick="handleGenerate()"
                         class="glass-btn w-full py-5 text-white rounded-xl font-bold text-[11px] uppercase tracking-[0.4em] flex items-center justify-center gap-3 shadow-xl shadow-black/10 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -795,6 +802,18 @@
         // --- Engine Switcher Logic (UI Only) ---
         let currentEngine = 'local';
         const ENGINE_MODE_KEY = 'angle_engine_mode';
+        let apiControlsState = null;
+
+        function ensureApiControls(){
+            if(apiControlsState) return apiControlsState;
+            const target = document.getElementById('apiControls');
+            apiControlsState = StudioToolApi.initControls(target, { temperature:0.7 }).catch(err => {
+                target.innerHTML = `<div class="tool-api-empty">${err.message}</div>`;
+                console.error(err);
+                return null;
+            });
+            return apiControlsState;
+        }
 
         window.switchEngine = function(mode) {
             currentEngine = mode;
@@ -803,15 +822,28 @@
             const glider = document.getElementById('glider');
             const localBtn = document.getElementById('modeLocal');
             const cloudBtn = document.getElementById('modeCloud');
+            const apiBtn = document.getElementById('modeApi');
+            const apiPanel = document.getElementById('apiControls');
 
             if (mode === 'local') {
                 glider.style.transform = 'translateX(0)';
                 localBtn.classList.add('active');
                 cloudBtn.classList.remove('active');
-            } else {
+                apiBtn.classList.remove('active');
+                apiPanel.classList.add('hidden');
+            } else if (mode === 'cloud') {
                 glider.style.transform = 'translateX(100%)';
                 cloudBtn.classList.add('active');
                 localBtn.classList.remove('active');
+                apiBtn.classList.remove('active');
+                apiPanel.classList.add('hidden');
+            } else {
+                glider.style.transform = 'translateX(200%)';
+                apiBtn.classList.add('active');
+                localBtn.classList.remove('active');
+                cloudBtn.classList.remove('active');
+                apiPanel.classList.remove('hidden');
+                ensureApiControls();
             }
         };
 
@@ -829,6 +861,7 @@
 
         let uploadedPath = "";
         let uploadedFile = null; // Store raw file for cloud upload
+        let uploadedAiRef = null;
         let currentResult = null;
         let allHistory = [];
         let currentIndex = 0;
@@ -877,6 +910,7 @@
         async function handleFile(file) {
             if (!file) return;
             uploadedFile = file; // Store for cloud usage
+            uploadedAiRef = null;
             const btn = document.getElementById('genBtn');
             const btnText = document.getElementById('btnText');
 
@@ -903,13 +937,43 @@
                 const res = await fetch('/api/upload', { method: 'POST', body: formData });
                 const data = await res.json();
                 uploadedPath = data.files[0].comfy_name;
+                try {
+                    uploadedAiRef = await StudioToolApi.uploadReference(file);
+                } catch (apiErr) {
+                    console.warn('AI reference upload failed', apiErr);
+                }
                 btn.disabled = false;
                 btnText.innerText = tr('studio.generateAngle');
             } catch (err) {
                 console.error("Upload error");
+                try {
+                    uploadedAiRef = await StudioToolApi.uploadReference(file);
+                } catch (apiErr) {
+                    console.warn('AI reference upload failed', apiErr);
+                }
                 btnText.innerText = tr('studio.uploadFailed');
                 btn.disabled = false;
             }
+        }
+
+        async function runApiTask() {
+            if (!uploadedAiRef) throw new Error("Please upload an image first");
+            await ensureApiControls();
+            const selected = StudioToolApi.selection('apiControls');
+            const result = await StudioToolApi.generateImage({
+                prompt: promptInput.value,
+                provider_id:selected.provider_id,
+                model:selected.model,
+                temperature:selected.temperature,
+                reference_images:[uploadedAiRef]
+            });
+            const images = (result.images || []).map(item => item.url || item).filter(Boolean);
+            if(!images.length) throw new Error("API did not return images");
+            return {
+                images,
+                model:selected.model,
+                params:{ provider_id:selected.provider_id, model:selected.model, temperature:selected.temperature, reference_images:[uploadedAiRef] }
+            };
         }
 
         function applyAngleToPrompt() {
@@ -1106,6 +1170,11 @@
                  return;
             }
 
+            if (!uploadedAiRef && currentEngine === 'api') {
+                 alert("Please upload an image first");
+                 return;
+            }
+
             // Allow manual prompt even if angle not applied, but require prompt input
             if (!promptInput.value.trim()) {
                 promptInput.style.transition = "0.2s";
@@ -1135,6 +1204,8 @@
                 if (currentEngine === 'cloud') {
                     // Cloud Logic
                     data = await runCloudTask();
+                } else if (currentEngine === 'api') {
+                    data = await runApiTask();
                 } else {
                     // Local Logic
                     const seed = Math.floor(Math.random() * 1000000000000000);
@@ -1179,7 +1250,9 @@
                     images: data.images,
                     prompt: promptInput.value,
                     timestamp: Date.now(),
-                    is_cloud: (currentEngine === 'cloud')
+                    is_cloud: (currentEngine === 'cloud'),
+                    model: data.model,
+                    params: data.params
                 }, true);
 
             } catch (err) {
@@ -1337,13 +1410,14 @@
             applyLanguage();
             // Restore engine mode
             const savedMode = localStorage.getItem(ENGINE_MODE_KEY);
-            if (savedMode && (savedMode === 'local' || savedMode === 'cloud')) {
+            if (savedMode && (savedMode === 'local' || savedMode === 'cloud' || savedMode === 'api')) {
                 switchEngine(savedMode);
             }
 
             loadHistory();
             window.HistoryBulkManager?.attach({masonry:'#masonry'});
-            observer.observe(document.getElementById('loadMoreTrigger'));
+            const trigger = document.getElementById('loadMoreTrigger');
+            if(trigger) observer.observe(trigger);
         };
 
         // WebSocket for real-time updates (optional but good for multi-tab sync)

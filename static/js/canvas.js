@@ -2673,9 +2673,10 @@ function renderMsGenBody(node){
     const msModel = MS_GEN_MODELS[modelKey] || MS_GEN_MODELS.zimage;
     const inputSources = generatorSources(node);
     const ordered = orderedSources(node, inputSources);
-    const mediaInputs = ordered.filter(src => src.refs?.some(ref => ['image','video','audio'].includes(mediaKindForRef(ref))));
+    const refOrdered = orderReferenceSourcesForMain(ordered);
+    const mediaInputs = refOrdered.filter(src => src.refs?.some(ref => ['image','video','audio'].includes(mediaKindForRef(ref))));
     const promptInputs = ordered.filter(src => src.prompt && !src.refs?.length);
-    const referenceImages = ordered.flatMap(src => src.refs || []);
+    const referenceImages = refOrdered.flatMap(src => src.refs || []);
     const isCustomMs = modelKey === 'custom';
     const msUsesImages = Boolean(msModel.supportsImage || msModel.acceptsImage);
     node.msCustomModel = node.msCustomModel || modelscopeImageModels()[0] || 'Tongyi-MAI/Z-Image-Turbo';
@@ -3011,7 +3012,7 @@ async function runMsGenNode(nodeId, opts={}){
     const cascadeTargetId = cascadeTargetIdFromOptions(opts);
     const sources = orderedSources(node, generatorSources(node));
     const prompt = sources.map(s => s.prompt).filter(Boolean).join('\n\n');
-    const refs = imageRefsOnly(sources.flatMap(s => s.refs || []));
+    const refs = imageRefsOnly(orderReferenceSourcesForMain(sources).flatMap(s => s.refs || []));
     const modelKey = node.msgenModel || 'zimage';
     const msModel = MS_GEN_MODELS[modelKey] || MS_GEN_MODELS.zimage;
     const msModelId = currentMsModelId(modelKey, node);
@@ -3264,9 +3265,11 @@ function openImageNodeMenu(nodeId, clientX, clientY){
     const kind = mediaKindForNode(node);
     const canPreview = node.url && !isMissingAssetUrl(node.url) && ['image','video'].includes(kind);
     const canEdit = node.url && !isMissingAssetUrl(node.url) && kind === 'image';
+    const canPrimaryRef = canEdit;
     imageNodeMenu.innerHTML = `
         ${canPreview ? `<button class="menu-btn" data-image-preview="${escapeAttr(nodeId)}"><i data-lucide="eye" class="w-4 h-4"></i><span>预览</span></button>` : ''}
         ${canEdit ? `<button class="menu-btn" data-image-edit="${escapeAttr(nodeId)}"><i data-lucide="pencil" class="w-4 h-4"></i><span>编辑</span></button>` : ''}
+        ${canPrimaryRef ? `<button class="menu-btn" data-image-main-ref="${escapeAttr(nodeId)}"><i data-lucide="${node.primaryReference ? 'star' : 'star-off'}" class="w-4 h-4"></i><span>${node.primaryReference ? '取消固定主图' : '固定为主图'}</span></button>` : ''}
         <button class="menu-btn" data-image-replace="${escapeAttr(nodeId)}"><i data-lucide="image-plus" class="w-4 h-4"></i><span>替换</span></button>
     `;
     imageNodeMenu.style.left = `${clientX}px`;
@@ -3288,12 +3291,30 @@ function openImageNodeMenu(nodeId, clientX, clientY){
             openImageEditor(nodeId);
         };
     }
+    const mainRefBtn = imageNodeMenu.querySelector('[data-image-main-ref]');
+    if(mainRefBtn){
+        mainRefBtn.onclick = e => {
+            e.stopPropagation();
+            closeImageNodeMenu();
+            toggleImageNodePrimaryReference(nodeId);
+        };
+    }
     imageNodeMenu.querySelector('[data-image-replace]').onclick = e => {
         e.stopPropagation();
         closeImageNodeMenu();
         pickImageForNode(nodeId);
     };
     refreshIcons();
+}
+function toggleImageNodePrimaryReference(nodeId){
+    const node = nodes.find(n => n.id === nodeId);
+    if(!node || node.type !== 'image' || !node.url || mediaKindForNode(node) !== 'image') return;
+    pushUndo();
+    node.primaryReference = !node.primaryReference;
+    syncGeneratorInputs();
+    refreshNodes([node.id]);
+    refreshGeneratorInputViews();
+    scheduleSave();
 }
 function openImageNodePreview(nodeId){
     const node = nodes.find(n => n.id === nodeId);
@@ -6088,16 +6109,25 @@ function renderNode(node){
             const missing = isMissingAssetUrl(node.url);
             const mediaKind = mediaKindForNode(node);
             const isEditableImage = mediaKind === 'image' && !missing;
-            body.innerHTML = `<div class="image-preview-wrap">${missing ? missingAssetHtml(node.url) : canvasPreviewImgHtml(node.url, 768, 'draggable="false"')}</div><div class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || 'image')}${missing ? ` · ${langIsEn() ? 'missing' : '文件缺失'}` : ''}</div>`;
+            const mainRefToggleHtml = isEditableImage ? `<button type="button" class="main-ref-toggle ${node.primaryReference ? 'active' : ''}" title="${node.primaryReference ? '已固定为参考图 1' : '固定为参考图 1'}"><i data-lucide="${node.primaryReference ? 'star' : 'star-off'}" class="w-3 h-3"></i><span>${node.primaryReference ? '主图' : '设为主图'}</span></button>` : '';
+            body.innerHTML = `<div class="image-preview-wrap">${missing ? missingAssetHtml(node.url) : canvasPreviewImgHtml(node.url, 768, 'draggable="false"')}</div><div class="image-meta-row"><div class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || 'image')}${missing ? ` · ${langIsEn() ? 'missing' : '文件缺失'}` : ''}</div>${mainRefToggleHtml}</div>`;
             if(!missing && mediaKind !== 'image'){
                 const mediaHtml = mediaKind === 'video'
                     ? `<div class="media-card video-card">${canvasVideoPreviewHtml(node.url, 768, 'draggable="false" data-video-fallback-attrs="controls"')}<button class="canvas-video-play" type="button" title="播放"><i data-lucide="play"></i></button></div>`
                     : `<div class="media-card audio-card"><i data-lucide="file-audio" class="w-8 h-8"></i><div class="audio-title">${escapeHtml(node.name || 'Audio')}</div><div class="audio-sub">AUDIO</div><audio src="${escapeAttr(node.url)}" data-url="${escapeAttr(node.url)}" controls preload="metadata"></audio></div>`;
-                body.innerHTML = `<div class="image-preview-wrap">${mediaHtml}</div><div class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || nodeTitleForMedia(node))}</div>`;
+                body.innerHTML = `<div class="image-preview-wrap">${mediaHtml}</div><div class="image-meta-row"><div class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || nodeTitleForMedia(node))}</div></div>`;
             }
             const previewWrap = body.querySelector('.image-preview-wrap');
             const loadedImg = body.querySelector('img');
             const videoPlayBtn = body.querySelector('.canvas-video-play');
+            const mainRefBtn = body.querySelector('.main-ref-toggle');
+            if(mainRefBtn){
+                mainRefBtn.onclick = e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleImageNodePrimaryReference(node.id);
+                };
+            }
             const openPreview = e => {
                 if(!node.url || missing) return;
                 e.preventDefault();
@@ -8202,7 +8232,8 @@ function renderGeneratorBody(node){
     wrap.className = 'generator-body';
     const inputSources = generatorSources(node);
     const ordered = orderedSources(node, inputSources);
-    const mediaInputs = ordered.filter(src => src.refs?.some(ref => ['image','video','audio'].includes(mediaKindForRef(ref))));
+    const refOrdered = orderReferenceSourcesForMain(ordered);
+    const mediaInputs = refOrdered.filter(src => src.refs?.some(ref => ['image','video','audio'].includes(mediaKindForRef(ref))));
     const promptInputs = ordered.filter(src => src.prompt && !src.refs?.length);
     sanitizeImageNodeProviderModel(node);
     normalizeApiNodeSizeChoice(node);
@@ -8326,7 +8357,7 @@ function renderGeneratorBody(node){
     const customWInput = wrap.querySelector('.custom-w-input');
     const customHInput = wrap.querySelector('.custom-h-input');
     const fitSizeBtn = wrap.querySelector('.fit-size-btn');
-    const referenceImages = ordered.flatMap(src => src.refs || []);
+    const referenceImages = refOrdered.flatMap(src => src.refs || []);
     const syncQualityControls = () => {
         qualitySelect.disabled = false;
         if(!['auto','low','medium','high'].includes(String(node.quality || 'auto'))) node.quality = 'auto';
@@ -8690,11 +8721,12 @@ function renderImageInputList(list, node, imageInputs, emptyText=null){
     list.innerHTML = imageInputs.length ? '' : `<div class="text-[11px] text-gray-300 py-2">${escapeHtml(emptyText || tr('canvas.inputImagesEmpty'))}</div>`;
     imageInputs.forEach((src, i) => {
         const item = document.createElement('div');
-        item.className = 'input-item';
+        const isMainRef = sourceHasPrimaryReference(src);
+        item.className = `input-item ${isMainRef ? 'main-ref' : ''}`;
         item.draggable = true;
         item.dataset.sourceId = src.id;
         const previewHtml = src.preview && !isMissingAssetUrl(src.preview) ? canvasPreviewImgHtml(src.preview, 256) : (src.preview ? missingAssetHtml(src.preview, true) : '<i data-lucide="image" class="w-6 h-6 text-slate-400"></i>');
-        item.innerHTML = `<span class="input-index">${i + 1}</span>${previewHtml}<span class="input-label">${escapeHtml(src.label)}</span>`;
+        item.innerHTML = `<span class="input-index">${i + 1}</span>${isMainRef ? '<span class="main-ref-badge">MAIN</span>' : ''}${previewHtml}<span class="input-label">${escapeHtml(src.label)}</span>`;
         item.ondragstart = e => {
             e.stopPropagation();
             internalDrag = true;
@@ -10046,12 +10078,12 @@ function mediaRefsFromNode(node){
     if(!node) return [];
     if(node.type === 'image' && node.url){
         const kind = mediaKindForNode(node);
-        return [{url:node.url, name:node.name || kind, role:node.role || '', kind}];
+        return [{url:node.url, name:node.name || kind, role:node.role || '', kind, nodeId:node.id, primaryReference:!!node.primaryReference}];
     }
     if(node.type === 'group'){
         return canvasGroupMemberNodes(node)
             .filter(x => x?.type === 'image' && x?.url)
-            .map(item => ({url:item.url, name:item.name || mediaKindForNode(item), role:item.role || '', kind:mediaKindForNode(item)}));
+            .map(item => ({url:item.url, name:item.name || mediaKindForNode(item), role:item.role || '', kind:mediaKindForNode(item), nodeId:item.id, primaryReference:!!item.primaryReference}));
     }
     if(node.type === 'output'){
         return (node.images || []).map((item, i) => {
@@ -10091,7 +10123,7 @@ function generatorSources(gen){
         }
         if(n.type === 'image' && n.url) {
             const kind = mediaKindForNode(n);
-            return {id:n.id, type:kind, label:n.name || kind, preview:n.url, refs:[{url:n.url, name:n.name || kind, role:n.role || '', kind}], prompt:''};
+            return {id:n.id, type:kind, label:n.name || kind, preview:n.url, primaryReference:!!n.primaryReference, refs:[{url:n.url, name:n.name || kind, role:n.role || '', kind, nodeId:n.id, primaryReference:!!n.primaryReference}], prompt:''};
         }
         if(n.type === 'group') {
             const items = canvasGroupMemberNodes(n);
@@ -10102,7 +10134,8 @@ function generatorSources(gen){
                 imageId:img.id,
                 label:img.name || mediaKindForNode(img),
                 preview:img.url,
-                refs:[{url:img.url, name:img.name || mediaKindForNode(img), role:img.role || '', kind:mediaKindForNode(img)}],
+                primaryReference:!!img.primaryReference,
+                refs:[{url:img.url, name:img.name || mediaKindForNode(img), role:img.role || '', kind:mediaKindForNode(img), nodeId:img.id, primaryReference:!!img.primaryReference}],
                 prompt:''
             }));
             const prompts = items.filter(x => x.type === 'prompt').map(p => p.text || '').filter(Boolean);
@@ -10154,6 +10187,20 @@ function orderedSources(gen, sources){
     sources.forEach(s => { if(!gen.inputs.includes(s.id)) gen.inputs.push(s.id); });
     return gen.inputs.map(id => sources.find(s => s.id === id)).filter(Boolean);
 }
+function sourceHasPrimaryReference(src){
+    if(src?.primaryReference) return true;
+    return (src?.refs || []).some(ref => ref?.primaryReference && mediaKindForRef(ref) === 'image');
+}
+function orderReferenceSourcesForMain(sources){
+    return [...(sources || [])]
+        .map((src, index) => ({src, index, primary:sourceHasPrimaryReference(src)}))
+        .sort((a, b) => Number(b.primary) - Number(a.primary) || a.index - b.index)
+        .map(item => item.src);
+}
+function orderedImageRefsForRun(gen){
+    const sources = orderedSources(gen, generatorSources(gen));
+    return imageRefsOnly(orderReferenceSourcesForMain(sources).flatMap(s => s.refs || []));
+}
 function reorderInput(gen, movedId, targetId){
     if(!movedId || movedId === targetId) return;
     const sources = generatorSources(gen);
@@ -10189,7 +10236,8 @@ function refreshGeneratorInputViews(){
         const el = nodesEl.querySelector(`.node[data-id="${gen.id}"]`);
         if(!el) return;
         const sources = orderedSources(gen, generatorSources(gen));
-        const imageInputs = sources
+        const refSources = orderReferenceSourcesForMain(sources);
+        const imageInputs = refSources
             .map(src => ({...src, refs:imageRefsOnly(src.refs || [])}))
             .filter(src => src.refs?.length);
         renderPromptPreview(el.querySelector('.prompt-list'), sources.filter(src => src.prompt && !src.refs?.length));
@@ -10215,7 +10263,7 @@ async function runGenerator(genId, opts={}){
     const cascadeTargetId = cascadeTargetIdFromOptions(opts);
     const sources = orderedSources(gen, generatorSources(gen));
     const prompt = sources.map(s => s.prompt).filter(Boolean).join('\n\n');
-    const refs = imageRefsOnly(sources.flatMap(s => s.refs || []));
+    const refs = imageRefsOnly(orderReferenceSourcesForMain(sources).flatMap(s => s.refs || []));
     if(!prompt && !refs.length){ alert(tr('canvas.needPromptOrImage')); return; }
     const count = Math.max(1, Math.min(8, Number(gen.count || 1)));
     let out = outputForNode(gen, 460);
@@ -10302,7 +10350,7 @@ async function runGeneratorLegacy(genId, opts={}){
     if(!gen || (gen.running && !opts.cascade)) return;
     const sources = orderedSources(gen, generatorSources(gen));
     const prompt = sources.map(s => s.prompt).filter(Boolean).join('\n\n');
-    const refs = imageRefsOnly(sources.flatMap(s => s.refs || []));
+    const refs = imageRefsOnly(orderReferenceSourcesForMain(sources).flatMap(s => s.refs || []));
     if(!prompt && !refs.length){ alert(tr('canvas.needPromptOrImage')); return; }
     const count = Math.max(1, Math.min(8, Number(gen.count || 1)));
     let out = outputForNode(gen, 460);
@@ -13186,15 +13234,22 @@ function startSelection(e){
     window.onmousemove = e2 => updateSelectionBox(e2.clientX, e2.clientY);
     window.onmouseup = finishSelection;
 }
+let selectionBoxRenderQueued = false;
 function updateSelectionBox(x, y){
     if(!selectDrag) return;
     selectDrag.x = x; selectDrag.y = y;
-    const left = Math.min(selectDrag.sx, x);
-    const top = Math.min(selectDrag.sy, y);
-    selectionBox.style.left = `${left}px`;
-    selectionBox.style.top = `${top}px`;
-    selectionBox.style.width = `${Math.abs(x - selectDrag.sx)}px`;
-    selectionBox.style.height = `${Math.abs(y - selectDrag.sy)}px`;
+    if(selectionBoxRenderQueued) return;
+    selectionBoxRenderQueued = true;
+    requestAnimationFrame(() => {
+        selectionBoxRenderQueued = false;
+        if(!selectDrag) return;
+        const left = Math.min(selectDrag.sx, selectDrag.x);
+        const top = Math.min(selectDrag.sy, selectDrag.y);
+        selectionBox.style.left = `${left}px`;
+        selectionBox.style.top = `${top}px`;
+        selectionBox.style.width = `${Math.abs(selectDrag.x - selectDrag.sx)}px`;
+        selectionBox.style.height = `${Math.abs(selectDrag.y - selectDrag.sy)}px`;
+    });
 }
 function finishSelection(){
     if(!selectDrag) return;
@@ -13210,8 +13265,7 @@ function finishSelection(){
     document.body.classList.remove('canvas-selecting');
     window.onmousemove = null;
     window.onmouseup = null;
-    render();
-    if(workflowTransferModal?.classList.contains('open')) updateWorkflowTransferMeta();
+    refreshSelectionVisuals();
 }
 function renderSelectionHub(){
     selectionHub.innerHTML = '';
