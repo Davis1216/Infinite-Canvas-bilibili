@@ -6,6 +6,8 @@
         "common.darkMode": { zh: "黑夜模式", en: "Dark Mode" },
         "common.lightMode": { zh: "白天模式", en: "Light Mode" },
         "common.language": { zh: "中文", en: "English" },
+        "common.showLocalTools": { zh: "显示本地功能", en: "Show Local Tools" },
+        "common.hideLocalTools": { zh: "隐藏本地功能", en: "Hide Local Tools" },
         "common.cancel": { zh: "取消", en: "Cancel" },
         "common.confirm": { zh: "确定", en: "Confirm" },
         "common.save": { zh: "保存", en: "Save" },

@@ -3265,7 +3265,7 @@ function openImageNodeMenu(nodeId, clientX, clientY){
     const kind = mediaKindForNode(node);
     const canPreview = node.url && !isMissingAssetUrl(node.url) && ['image','video'].includes(kind);
     const canEdit = node.url && !isMissingAssetUrl(node.url) && kind === 'image';
-    const canPrimaryRef = canEdit;
+    const canPrimaryRef = kind === 'image';
     imageNodeMenu.innerHTML = `
         ${canPreview ? `<button class="menu-btn" data-image-preview="${escapeAttr(nodeId)}"><i data-lucide="eye" class="w-4 h-4"></i><span>预览</span></button>` : ''}
         ${canEdit ? `<button class="menu-btn" data-image-edit="${escapeAttr(nodeId)}"><i data-lucide="pencil" class="w-4 h-4"></i><span>编辑</span></button>` : ''}
@@ -3308,11 +3308,17 @@ function openImageNodeMenu(nodeId, clientX, clientY){
 }
 function toggleImageNodePrimaryReference(nodeId){
     const node = nodes.find(n => n.id === nodeId);
-    if(!node || node.type !== 'image' || !node.url || mediaKindForNode(node) !== 'image') return;
+    if(!node || node.type !== 'image' || mediaKindForNode(node) !== 'image') return;
     pushUndo();
-    node.primaryReference = !node.primaryReference;
+    const nextValue = !node.primaryReference;
+    if(nextValue){
+        nodes.forEach(item => {
+            if(item.type === 'image' && item.id !== node.id) item.primaryReference = false;
+        });
+    }
+    node.primaryReference = nextValue;
     syncGeneratorInputs();
-    refreshNodes([node.id]);
+    refreshNodes(nodes.filter(item => item.type === 'image').map(item => item.id));
     refreshGeneratorInputViews();
     scheduleSave();
 }
@@ -4056,6 +4062,7 @@ async function applyImageDropPayloadToNode(nodeId, payload){
         node.url = payload.url;
         node.name = outputImageName(payload.url);
         node.mediaKind = isVideoUrl(payload.url) ? 'video' : isAudioUrl(payload.url) ? 'audio' : 'image';
+        if(node.mediaKind !== 'image') node.primaryReference = false;
         render();
         scheduleSave();
     }
@@ -4102,6 +4109,15 @@ async function fillImageNode(nodeId, files, opts={}){
         const outgoing = connections.filter(c => c.from === source?.id).map(c => c.to);
         const incoming = connections.filter(c => c.to === source?.id).map(c => c.from);
         const created = await uploadImageGroup(imgs, point);
+        if(source?.primaryReference){
+            const firstImage = created.find(item => item?.type === 'image' && mediaKindForNode(item) === 'image');
+            if(firstImage){
+                nodes.forEach(item => {
+                    if(item.type === 'image' && item.id !== firstImage.id) item.primaryReference = false;
+                });
+                firstImage.primaryReference = true;
+            }
+        }
         const group = created?.group;
         if(source && created?.length > 1){
             nodes = nodes.filter(n => n.id !== source.id);
@@ -4133,6 +4149,7 @@ async function fillImageNode(nodeId, files, opts={}){
         node.url = file.url;
         node.name = file.name;
         node.mediaKind = file.kind || mediaKindForUpload(imgs[0]);
+        if(node.mediaKind !== 'image') node.primaryReference = false;
         render();
         scheduleSave();
     }
@@ -6108,8 +6125,9 @@ function renderNode(node){
         if(node.url) {
             const missing = isMissingAssetUrl(node.url);
             const mediaKind = mediaKindForNode(node);
-            const isEditableImage = mediaKind === 'image' && !missing;
-            const mainRefToggleHtml = isEditableImage ? `<button type="button" class="main-ref-toggle ${node.primaryReference ? 'active' : ''}" title="${node.primaryReference ? '已固定为参考图 1' : '固定为参考图 1'}"><i data-lucide="${node.primaryReference ? 'star' : 'star-off'}" class="w-3 h-3"></i><span>${node.primaryReference ? '主图' : '设为主图'}</span></button>` : '';
+            const isImageKind = mediaKind === 'image';
+            const isEditableImage = isImageKind && !missing;
+            const mainRefToggleHtml = isImageKind ? `<button type="button" class="main-ref-toggle ${node.primaryReference ? 'active' : ''}" title="${node.primaryReference ? '已固定为参考图 1' : '固定为参考图 1'}"><i data-lucide="${node.primaryReference ? 'star' : 'star-off'}" class="w-3 h-3"></i><span>${node.primaryReference ? '主图' : '设为主图'}</span></button>` : '';
             body.innerHTML = `<div class="image-preview-wrap">${missing ? missingAssetHtml(node.url) : canvasPreviewImgHtml(node.url, 768, 'draggable="false"')}</div><div class="image-meta-row"><div class="image-caption text-[11px] text-gray-400 truncate">${escapeHtml(node.name || 'image')}${missing ? ` · ${langIsEn() ? 'missing' : '文件缺失'}` : ''}</div>${mainRefToggleHtml}</div>`;
             if(!missing && mediaKind !== 'image'){
                 const mediaHtml = mediaKind === 'video'
@@ -6194,9 +6212,22 @@ function renderNode(node){
                 loadedImg.onload = () => refreshGeometryAfterLayout();
             }
         } else {
-        body.innerHTML = `<div class="blank-image"><i data-lucide="image-plus" class="w-7 h-7"></i><div class="text-[11px] font-bold">${tr('canvas.clickDragPasteImage')}</div></div>`;
+        body.innerHTML = `<div class="blank-image"><button type="button" class="main-ref-toggle blank-main-ref ${node.primaryReference ? 'active' : ''}" title="${node.primaryReference ? '已固定为参考图 1' : '固定为参考图 1'}"><i data-lucide="${node.primaryReference ? 'star' : 'star-off'}" class="w-3 h-3"></i><span>${node.primaryReference ? '主图' : '设为主图'}</span></button><i data-lucide="image-plus" class="w-7 h-7"></i><div class="text-[11px] font-bold">${tr('canvas.clickDragPasteImage')}</div></div>`;
             const blank = body.querySelector('.blank-image');
+            const mainRefBtn = body.querySelector('.main-ref-toggle');
+            if(mainRefBtn){
+                mainRefBtn.onclick = e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleImageNodePrimaryReference(node.id);
+                };
+            }
             blank.onclick = () => pickImageForNode(node.id);
+            blank.oncontextmenu = e => {
+                e.preventDefault();
+                e.stopPropagation();
+                openImageNodeMenu(node.id, e.clientX, e.clientY);
+            };
             blank.ondragover = e => allowImageNodeDropEvent(e, blank);
             blank.ondragleave = e => { e.stopPropagation(); blank.classList.remove('drag-over'); };
             blank.ondrop = e => handleImageNodeDropEvent(e, node.id, blank);

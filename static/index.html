@@ -19,15 +19,20 @@
                     document.documentElement.classList.add('studio-theme-dark');
                     document.documentElement.classList.add('theme-dark');
                 }
+                if(localStorage.getItem('studio_local_tools_visible') !== '1') {
+                    document.documentElement.classList.add('local-tools-hidden');
+                }
                 document.documentElement.classList.add('studio-route-booting');
-            } catch(e) {}
+            } catch(e) {
+                document.documentElement.classList.add('local-tools-hidden');
+            }
         })();
     </script>
-    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.3.1782696751"></script>
-    <script src="/static/js/theme.js?v=2026.07.3.1783117645"></script>
-    <script src="/static/js/i18n.js?v=2026.07.3.1783116068"></script>
+    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.3.local-tools"></script>
     <style>
-        @import url('/static/vendor/css/fonts.css?v=2026.07.3.1782696732');
+        @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783154122');
 
         /* 本地 Tailwind 工具类兜底：CDN 慢/未就绪时也能立刻给图标尺寸，避免首屏左侧栏空白 */
         .w-1\.5 { width: 0.375rem; }
@@ -342,6 +347,12 @@
             pointer-events: none;
         }
 
+        html.local-tools-hidden #local-nav-toggle,
+        html.local-tools-hidden #local-nav-group,
+        html.local-tools-hidden #local-nav-separator {
+            display: none !important;
+        }
+
         .sidebar nav {
             width: 100%;
             min-height: 0;
@@ -502,79 +513,6 @@
             font-size: 9px;
         }
 
-        /* 作者组件 */
-        .author-box {
-            width: 100%;
-            height: 60px;
-            flex: 0 0 60px;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-
-        .dx-letter {
-            position: absolute;
-            font-size: 14px;
-            font-weight: 800;
-            color: var(--text);
-            /* 只过渡 hover 时真正改的 transform/opacity，避免 all 触发延迟 */
-            transition: transform 0.5s var(--fluid-ease) 0.4s, opacity 0.5s var(--fluid-ease) 0.4s;
-            z-index: 10;
-        }
-
-        .letter-d { transform: translateX(-8px); }
-        .letter-x { transform: translateX(8px); }
-
-        .sidebar:hover .letter-d {
-            transform: translateX(-120px);
-            opacity: 0;
-            transition-delay: 0s;
-        }
-
-        .sidebar:hover .letter-x {
-            transform: translateX(120px);
-            opacity: 0;
-            transition-delay: 0s;
-        }
-
-        .author-content-wrap {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            opacity: 0;
-            transform: scale(0.9);
-            transition: all 0.4s var(--fluid-ease) 0s;
-            pointer-events: none;
-        }
-
-        .sidebar:hover .author-content-wrap {
-            opacity: 1;
-            transform: scale(1);
-            transition-delay: 0.2s;
-            pointer-events: auto;
-        }
-
-        .author-name-lite {
-            font-size: 12px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            color: var(--author-name);
-        }
-
-        .social-row-lite { display: flex; gap: 12px; }
-
-        .social-icon-lite {
-            color: var(--social-icon);
-            transition: color 0.2s, transform 0.2s;
-        }
-
-        .social-icon-lite:hover {
-            color: var(--text);
-            transform: translateY(-1px);
-        }
-
         .side-actions {
             margin-top:auto;
             margin-bottom:12px;
@@ -694,7 +632,7 @@
             transition: max-height .28s var(--fluid-ease), opacity .18s ease;
         }
         .settings-fold-group:not(.is-collapsed) {
-            max-height: 132px;
+            max-height: 176px;
             opacity: 1;
             pointer-events: auto;
         }
@@ -841,7 +779,7 @@
                 gap: 5px;
             }
             .settings-fold-group:not(.is-collapsed) {
-                max-height: 105px;
+                max-height: 142px;
             }
             .side-pill {
                 height:30px;
@@ -850,13 +788,6 @@
             }
             .project-version-badge { width:40px; min-height:16px; font-size:8px; }
             .update-now-btn.show { min-height:22px; width:48px; }
-            .author-box {
-                height:32px;
-                flex-basis:32px;
-            }
-            .dx-letter {
-                font-size:12px;
-            }
         }
 
         @media (max-height: 660px) {
@@ -892,19 +823,12 @@
                 gap: 4px;
             }
             .settings-fold-group:not(.is-collapsed) {
-                max-height: 102px;
+                max-height: 138px;
             }
             .side-pill {
                 height:30px;
                 flex-basis:30px;
                 width:38px;
-            }
-            .author-box {
-                height:28px;
-                flex-basis:28px;
-            }
-            .dx-letter {
-                font-size:11px;
             }
             .side-pill svg { width:15px; height:15px; }
             .project-version-badge { width:38px; min-height:16px; font-size:8px; }
@@ -1362,22 +1286,6 @@
             opacity: 1;
             transition-delay: 0.1s;
         }
-        .sidebar.is-pinned .letter-d {
-            transform: translateX(-120px);
-            opacity: 0;
-            transition-delay: 0s;
-        }
-        .sidebar.is-pinned .letter-x {
-            transform: translateX(120px);
-            opacity: 0;
-            transition-delay: 0s;
-        }
-        .sidebar.is-pinned .author-content-wrap {
-            opacity: 1;
-            transform: scale(1);
-            transition-delay: 0.2s;
-            pointer-events: auto;
-        }
         .sidebar.is-pinned .side-pill {
             width: 170px;
             gap: 8px;
@@ -1424,19 +1332,6 @@
         }
         .sidebar.is-collapsing:hover .nav-text {
             opacity: 0;
-        }
-        .sidebar.is-collapsing:hover .letter-d {
-            transform: translateX(-8px);
-            opacity: 1;
-        }
-        .sidebar.is-collapsing:hover .letter-x {
-            transform: translateX(8px);
-            opacity: 1;
-        }
-        .sidebar.is-collapsing:hover .author-content-wrap {
-            opacity: 0;
-            transform: scale(0.9);
-            pointer-events: none;
         }
         .sidebar.is-collapsing:hover .side-pill {
             width: 44px;
@@ -1516,7 +1411,7 @@
                 </div>
 
                 <!-- 分隔线 -->
-                <div style="width:32px;height:1px;background:var(--border);margin:8px auto;transition:background 0.3s;"></div>
+                <div id="local-nav-separator" style="width:32px;height:1px;background:var(--border);margin:8px auto;transition:background 0.3s;"></div>
 
                 <div class="nav-item" onclick="switchUI(this, 'online')">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1571,6 +1466,19 @@
                     </svg>
                 </button>
                 <div class="settings-fold-group is-collapsed" id="settings-fold-group">
+                    <button class="side-pill" onclick="toggleLocalToolsVisibility()" id="local-tools-toggle-btn" type="button" title="显示本地功能">
+                        <svg id="icon-local-tools-show" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        <svg id="icon-local-tools-hide" style="display:none" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19C5 19 1 12 1 12a20.29 20.29 0 0 1 5.06-5.94"></path>
+                            <path d="M9.9 4.24A10.65 10.65 0 0 1 12 4c7 0 11 8 11 8a20.2 20.2 0 0 1-3.05 4.31"></path>
+                            <path d="M14.12 14.12A3 3 0 0 1 9.88 9.88"></path>
+                            <line x1="1" y1="1" x2="23" y2="23"></line>
+                        </svg>
+                        <span class="side-pill-text" data-i18n="common.showLocalTools">显示本地功能</span>
+                    </button>
                     <button class="side-pill" onclick="toggleTheme()" id="theme-toggle-btn" type="button" title="切换夜间模式">
                         <svg id="icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
@@ -1608,58 +1516,18 @@
                         <span class="side-pill-text" data-i18n="common.comfyuiSettings">工作流设置</span>
                     </button>
                 </div>
-                <button id="github-entry-btn" class="side-pill" onclick="openProjectPage()" type="button" title="GitHub">
-                    <svg fill="currentColor" stroke="none" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.05c-3.34.73-4.04-1.42-4.04-1.42-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.21.09 1.85 1.25 1.85 1.25 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.53.12-3.18 0 0 1.01-.32 3.3 1.23a11.45 11.45 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.49 5.93.43.37.81 1.1.81 2.22v3.29c0 .32.22.69.83.57A12 12 0 0 0 12 .5Z"></path>
-                    </svg>
-                    <span class="side-pill-text" data-i18n="common.project">项目主页</span>
-                </button>
-                <button id="update-now-btn" class="update-now-btn" onclick="runProjectUpdate()" type="button" title="一键更新">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
-                        <path d="M21 3v6h-6"></path>
-                    </svg>
-                    <span id="update-now-text" class="update-now-text" data-i18n="update.oneClick">一键更新</span>
-                </button>
-                <div id="project-version-badge" class="project-version-badge" title="点击检测更新" role="button" tabindex="0" onclick="checkForUpdates(true)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();checkForUpdates(true);}">v-</div>
             </div>
 
-            <div class="author-box">
-                <span class="dx-letter letter-d">D</span>
-                <span class="dx-letter letter-x">X</span>
-
-                <div class="author-content-wrap">
-                    <div class="author-name-lite">wuli大雄</div>
-                    <div class="social-row-lite">
-                        <a href="https://space.bilibili.com/78652351" target="_blank" class="social-icon-lite">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M17.813 4.653h-.854L15.66 3.053a1.147 1.147 0 00-1.63 0l-1.3 1.6h-1.46L9.97 3.053a1.147 1.147 0 00-1.63 0L7.043 4.653h-.854a3.946 3.946 0 00-3.93 3.934v8.117a3.946 3.946 0 003.93 3.934h11.624a3.946 3.946 0 003.93-3.934V8.587a3.946 3.946 0 00-3.93-3.934zM7.152 13.9a1.465 1.465 0 111.47-1.462 1.465 1.465 0 01-1.47 1.462zm7.696 0a1.465 1.465 0 111.47-1.462 1.465 1.465 0 01-1.47 1.462z" />
-                            </svg>
-                        </a>
-                        <a href="https://www.xiaohongshu.com/user/profile/6433c34c000000001a023538" target="_blank" class="social-icon-lite">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z" />
-                            </svg>
-                        </a>
-                        <a href="https://www.youtube.com/@%E5%A4%A7%E9%9B%84dx" target="_blank" class="social-icon-lite">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                            </svg>
-                        </a>
-                        <a href="https://x.com/dx8152?s=21" target="_blank" class="social-icon-lite">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                            </svg>
-                        </a>
-                    </div>
-                </div>
-            </div>
         </aside>
         <script>
             /* 在侧栏 DOM 解析完后立即把 active 类移到当前页对应的入口，避免首屏先在文生图上闪一下 */
             (function(){
                 try {
+                    var localToolsVisible = localStorage.getItem('studio_local_tools_visible') === '1';
                     var pageId = localStorage.getItem('studio_active_page');
+                    if(!localToolsVisible && ['zimage','enhance','klein','angle'].indexOf(pageId) !== -1) {
+                        pageId = 'online';
+                    }
                     if(pageId && pageId !== 'zimage') {
                         document.querySelectorAll('.nav-item.active, .side-pill.active').forEach(function(n){
                             n.classList.remove('active');
@@ -1672,16 +1540,16 @@
         </script>
 
         <main class="stage">
-            <iframe id="frame-zimage" data-src="/static/zimage.html?v=2026.07.3.1783152169" class="active" scrolling="yes"></iframe>
-            <iframe id="frame-enhance" data-src="/static/enhance.html?v=2026.07.3.1783152169" scrolling="yes"></iframe>
-            <iframe id="frame-klein" data-src="/static/klein.html?v=2026.07.3.1783152169" scrolling="yes"></iframe>
-            <iframe id="frame-angle" data-src="/static/angle.html?v=2026.07.3.1783152169" scrolling="yes"></iframe>
-            <iframe id="frame-online" data-src="/static/online.html?v=2026.07.3.1783152169" scrolling="yes"></iframe>
-            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.07.3.1783152169" scrolling="yes"></iframe>
-            <iframe id="frame-asset-manager" data-src="/static/asset-manager.html?v=2026.07.3.1783152169" scrolling="yes"></iframe>
-            <iframe id="frame-api-settings" data-src="/static/api-settings.html?v=2026.07.3.1783152169" scrolling="yes"></iframe>
-            <iframe id="frame-comfyui-settings" data-src="/static/comfyui-settings.html?v=2026.07.3.1783152169" scrolling="yes"></iframe>
-            <iframe id="frame-canvas" data-src="/static/canvas-list.html?v=2026.07.3.1783152169" scrolling="yes"></iframe>
+            <iframe id="frame-zimage" data-src="/static/zimage.html?v=2026.07.4.2.1783580768" class="active" scrolling="yes"></iframe>
+            <iframe id="frame-enhance" data-src="/static/enhance.html?v=2026.07.4.2.1783580768" scrolling="yes"></iframe>
+            <iframe id="frame-klein" data-src="/static/klein.html?v=2026.07.4.2.1783580768" scrolling="yes"></iframe>
+            <iframe id="frame-angle" data-src="/static/angle.html?v=2026.07.4.2.1783785204" scrolling="yes"></iframe>
+            <iframe id="frame-online" data-src="/static/online.html?v=2026.07.4.2.1783513172" scrolling="yes"></iframe>
+            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.07.4.2.1783512641" scrolling="yes"></iframe>
+            <iframe id="frame-asset-manager" data-src="/static/asset-manager.html?v=2026.07.4.2.1783154233" scrolling="yes"></iframe>
+            <iframe id="frame-api-settings" data-src="/static/api-settings.html?v=2026.07.4.2.1783157865" scrolling="yes"></iframe>
+            <iframe id="frame-comfyui-settings" data-src="/static/comfyui-settings.html?v=2026.07.4.2.1783154233" scrolling="yes"></iframe>
+            <iframe id="frame-canvas" data-src="/static/canvas-list.html?v=2026.07.4.2.1783154233" scrolling="yes"></iframe>
 
         </main>
     </div>
@@ -1786,9 +1654,10 @@
         localStorage.setItem("client_id", CID);
         const ACTIVE_PAGE_KEY = 'studio_active_page';
         const LOCAL_NAV_COLLAPSED_KEY = 'studio_local_nav_collapsed';
+        const LOCAL_TOOLS_VISIBLE_KEY = 'studio_local_tools_visible';
         const SIDEBAR_SETTINGS_COLLAPSED_KEY = 'studio_sidebar_settings_collapsed';
         const SIDEBAR_PINNED_KEY = 'studio_sidebar_pinned';
-        const DEFAULT_PAGE_ID = 'zimage';
+        const DEFAULT_PAGE_ID = 'online';
         const PAGE_IDS = ['zimage','enhance','klein','angle','online','gpt-chat','canvas','asset-manager','api-settings','comfyui-settings'];
         const LOCAL_PAGE_IDS = ['zimage','enhance','klein','angle'];
         const PROJECT_URL = 'https://github.com/hero8152/Infinite-Canvas';
@@ -1850,6 +1719,44 @@
             setLocalNavCollapsed(savedCollapsed && !LOCAL_PAGE_IDS.includes(id), { skipRemember:true });
         }
 
+        function isLocalToolsVisible() {
+            return localStorage.getItem(LOCAL_TOOLS_VISIBLE_KEY) === '1';
+        }
+
+        function updateLocalToolsToggle(visible = isLocalToolsVisible()) {
+            const btn = document.getElementById('local-tools-toggle-btn');
+            const label = btn?.querySelector('.side-pill-text');
+            const showIcon = document.getElementById('icon-local-tools-show');
+            const hideIcon = document.getElementById('icon-local-tools-hide');
+            const key = visible ? 'common.hideLocalTools' : 'common.showLocalTools';
+            const translated = window.StudioI18n ? window.StudioI18n.t(key) : '';
+            const text = translated && translated !== key ? translated : (visible ? '隐藏本地功能' : '显示本地功能');
+            if(label) {
+                label.dataset.i18n = key;
+                label.textContent = text;
+            }
+            if(btn) btn.title = text;
+            if(showIcon) showIcon.style.display = visible ? 'none' : 'block';
+            if(hideIcon) hideIcon.style.display = visible ? 'block' : 'none';
+        }
+
+        function setLocalToolsVisible(visible, options = {}) {
+            document.documentElement.classList.toggle('local-tools-hidden', !visible);
+            updateLocalToolsToggle(visible);
+            if(!options.skipRemember) localStorage.setItem(LOCAL_TOOLS_VISIBLE_KEY, visible ? '1' : '0');
+            const activeId = localStorage.getItem(ACTIVE_PAGE_KEY);
+            if(!visible && LOCAL_PAGE_IDS.includes(activeId)) {
+                const trigger = document.querySelector(`[onclick*="'online'"],[onclick*='"online"']`);
+                switchUI(trigger, 'online');
+            }
+        }
+
+        function toggleLocalToolsVisibility() {
+            setLocalToolsVisible(!isLocalToolsVisible());
+        }
+
+        window.toggleLocalToolsVisibility = toggleLocalToolsVisibility;
+
         function setSidebarSettingsCollapsed(collapsed, options = {}) {
             const group = document.getElementById('settings-fold-group');
             const toggle = document.getElementById('settings-fold-toggle');
@@ -1882,10 +1789,15 @@
         function switchUI(el, id, options = {}) {
             resetStudioRootScroll();
             if(!PAGE_IDS.includes(id)) id = DEFAULT_PAGE_ID;
+            if(!isLocalToolsVisible() && LOCAL_PAGE_IDS.includes(id)) {
+                id = DEFAULT_PAGE_ID;
+                el = document.querySelector(`[onclick*="'${id}'"],[onclick*='"${id}"']`);
+            }
             document.querySelectorAll('.nav-item,.side-pill').forEach(n => n.classList.remove('active'));
             if(el) el.classList.add('active');
             document.querySelectorAll('iframe').forEach(f => f.classList.remove('active'));
             const target = document.getElementById('frame-' + id);
+            if(!target) return;
             target.classList.add('active');
             if (!target.src) target.src = target.dataset.src;
             if(!options.skipRemember) localStorage.setItem(ACTIVE_PAGE_KEY, id);
@@ -1929,7 +1841,9 @@
 
         function restoreActivePage() {
             restoreSidebarPinned();
-            const id = PAGE_IDS.includes(localStorage.getItem(ACTIVE_PAGE_KEY)) ? localStorage.getItem(ACTIVE_PAGE_KEY) : DEFAULT_PAGE_ID;
+            let id = PAGE_IDS.includes(localStorage.getItem(ACTIVE_PAGE_KEY)) ? localStorage.getItem(ACTIVE_PAGE_KEY) : DEFAULT_PAGE_ID;
+            if(!isLocalToolsVisible() && LOCAL_PAGE_IDS.includes(id)) id = DEFAULT_PAGE_ID;
+            setLocalToolsVisible(isLocalToolsVisible(), { skipRemember:true });
             restoreLocalNav(id);
             restoreSidebarSettings(id);
             const trigger = document.querySelector(`[onclick*="'${id}'"],[onclick*='"${id}"']`);
@@ -2060,6 +1974,7 @@
             if(!window.StudioI18n) return;
             window.StudioI18n.toggle();
             document.querySelectorAll('iframe').forEach(frame => syncLanguageToFrame(frame));
+            updateLocalToolsToggle();
             updateProjectUpdateTitle();
             refreshUpdateButtonText();
             refreshProjectUpdateModalText();
@@ -2094,13 +2009,14 @@
             const theme = window.StudioTheme ? window.StudioTheme.get() : 'light';
             updateThemeIcon(theme);
             if(window.StudioI18n) window.StudioI18n.apply();
+            setLocalToolsVisible(isLocalToolsVisible(), { skipRemember:true });
             broadcastLanguage();
             const sidebar = document.getElementById('studioSidebar');
             if(sidebar) {
                 sidebar.addEventListener('mouseenter', () => pauseScaleInFrames());
                 sidebar.addEventListener('mouseleave', () => pauseScaleInFrames());
             }
-            checkForUpdates();
+            // 独立二创版本不在首页自动检查/提示上游更新，避免误触覆盖本地改动。
         });
 
         // sync theme when iframe loads

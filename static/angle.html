@@ -862,6 +862,7 @@
         let uploadedPath = "";
         let uploadedFile = null; // Store raw file for cloud upload
         let uploadedAiRef = null;
+        let uploadedImageDimensions = null;
         let currentResult = null;
         let allHistory = [];
         let currentIndex = 0;
@@ -911,6 +912,7 @@
             if (!file) return;
             uploadedFile = file; // Store for cloud usage
             uploadedAiRef = null;
+            uploadedImageDimensions = null;
             const btn = document.getElementById('genBtn');
             const btnText = document.getElementById('btnText');
 
@@ -919,51 +921,95 @@
 
             const reader = new FileReader();
             reader.onload = (e) => {
-                previewImg.src = e.target.result;
+                const dataUrl = e.target.result;
+                previewImg.onload = () => {
+                    uploadedImageDimensions = { width: previewImg.naturalWidth || 0, height: previewImg.naturalHeight || 0 };
+                };
+                previewImg.src = dataUrl;
                 previewImg.classList.remove('hidden');
                 document.getElementById('uploadContent').classList.add('opacity-0');
                 document.getElementById('changeOverlay').classList.replace('hidden', 'flex');
 
                 // Automatically apply to 3D scene
                 if (window.update3DTexture) {
-                    window.update3DTexture(e.target.result);
+                    window.update3DTexture(dataUrl);
                 }
             };
             reader.readAsDataURL(file);
 
-            const formData = new FormData();
-            formData.append('files', file);
             try {
-                const res = await fetch('/api/upload', { method: 'POST', body: formData });
-                const data = await res.json();
-                uploadedPath = data.files[0].comfy_name;
-                try {
+                uploadedPath = "";
+                if (currentEngine === 'api' || currentEngine === 'cloud') {
                     uploadedAiRef = await StudioToolApi.uploadReference(file);
-                } catch (apiErr) {
-                    console.warn('AI reference upload failed', apiErr);
+                } else if (currentEngine === 'local') {
+                    const formData = new FormData();
+                    formData.append('files', file);
+                    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (!res.ok || !data.files?.[0]) throw new Error(data.detail || 'Local upload failed');
+                    uploadedPath = data.files[0].comfy_name;
+                    try {
+                        uploadedAiRef = await StudioToolApi.uploadReference(file);
+                    } catch (apiErr) {
+                        console.warn('AI reference upload failed', apiErr);
+                    }
                 }
                 btn.disabled = false;
                 btnText.innerText = tr('studio.generateAngle');
             } catch (err) {
                 console.error("Upload error");
-                try {
-                    uploadedAiRef = await StudioToolApi.uploadReference(file);
-                } catch (apiErr) {
-                    console.warn('AI reference upload failed', apiErr);
+                if (currentEngine === 'cloud') {
+                    btnText.innerText = tr('studio.generateAngle');
+                } else {
+                    btnText.innerText = tr('studio.uploadFailed');
                 }
-                btnText.innerText = tr('studio.uploadFailed');
                 btn.disabled = false;
             }
+        }
+
+        function angleApiSizeFromReference() {
+            const width = Number(uploadedImageDimensions?.width || previewImg.naturalWidth || 0);
+            const height = Number(uploadedImageDimensions?.height || previewImg.naturalHeight || 0);
+            if (!width || !height) return "1024x1024";
+            const ratio = width / height;
+            const longSide = Math.min(1536, Math.max(1024, Math.max(width, height)));
+            const rawWidth = ratio >= 1 ? longSide : longSide * ratio;
+            const rawHeight = ratio >= 1 ? longSide / ratio : longSide;
+            const align16 = value => Math.max(64, Math.round(value / 16) * 16);
+            return `${align16(rawWidth)}x${align16(rawHeight)}`;
+        }
+
+        function angleApiPrompt(basePrompt, size) {
+            const match = String(size || "").match(/(\d+)\s*x\s*(\d+)/i);
+            let sizeInstruction = "";
+            if (match) {
+                const width = Number(match[1]);
+                const height = Number(match[2]);
+                if (width && height && width !== height) {
+                    const orientation = width > height ? "横向宽幅" : "纵向长幅";
+                    sizeInstruction = `保持参考图的${orientation}构图和宽高比，目标尺寸 ${width}x${height}，不要输出正方形 1:1，不要裁切主体。`;
+                }
+            }
+            return [
+                "请基于参考图进行图片编辑，而不是重新创作新图。",
+                "保持原图主体、场景、风格、光线和画面连续性。",
+                sizeInstruction,
+                "只改变相机视角/镜头距离/俯仰角，让画面看起来像同一场景从新机位拍摄。",
+                basePrompt
+            ].filter(Boolean).join("\n");
         }
 
         async function runApiTask() {
             if (!uploadedAiRef) throw new Error("Please upload an image first");
             await ensureApiControls();
             const selected = StudioToolApi.selection('apiControls');
+            const size = angleApiSizeFromReference();
+            const prompt = angleApiPrompt(promptInput.value, size);
             const result = await StudioToolApi.generateImage({
-                prompt: promptInput.value,
+                prompt,
                 provider_id:selected.provider_id,
                 model:selected.model,
+                size,
                 temperature:selected.temperature,
                 reference_images:[uploadedAiRef]
             });
@@ -972,7 +1018,7 @@
             return {
                 images,
                 model:selected.model,
-                params:{ provider_id:selected.provider_id, model:selected.model, temperature:selected.temperature, reference_images:[uploadedAiRef] }
+                params:{ provider_id:selected.provider_id, model:selected.model, size, temperature:selected.temperature, reference_images:[uploadedAiRef] }
             };
         }
 
