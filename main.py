@@ -10497,12 +10497,30 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
             chat_url = provider_endpoint_url(provider, "image_generation_endpoint", "/v1/chat/completions")
             response = await post_json(chat_url, body)
             if response.status_code in {400, 415, 422} and any(token in response.text.lower() for token in ("unknown", "unsupported", "unrecognized", "unexpected", "extra fields", "response_format", "width", "height", "size", "temperature")):
+                retry_body = dict(body)
+                retry_body.pop("response_format", None)
+                response = await post_json(chat_url, retry_body)
+            if response.status_code in {400, 415, 422} and any(token in response.text.lower() for token in ("unknown", "unsupported", "unrecognized", "unexpected", "extra fields", "width", "height")):
+                retry_body = dict(body)
+                retry_body.pop("response_format", None)
+                retry_body.pop("width", None)
+                retry_body.pop("height", None)
+                response = await post_json(chat_url, retry_body)
+            if response.status_code in {400, 415, 422} and any(token in response.text.lower() for token in ("temperature", "temp")):
+                retry_body = dict(body)
+                retry_body.pop("response_format", None)
+                retry_body.pop("width", None)
+                retry_body.pop("height", None)
+                retry_body.pop("temperature", None)
+                response = await post_json(chat_url, retry_body)
+            if response.status_code in {400, 415, 422} and any(token in response.text.lower() for token in ("unknown", "unsupported", "unrecognized", "unexpected", "extra fields", "size")):
                 minimal_body = {
                     "model": model,
                     "messages": [{"role": "user", "content": content}],
                     "stream": False,
-                    "temperature": temperature,
                 }
+                if "temperature" not in response.text.lower() and "temp" not in response.text.lower():
+                    minimal_body["temperature"] = temperature
                 response = await post_json(chat_url, minimal_body)
         elif image_request_mode == "openai-responses":
             tool = {"type": "image_generation"}

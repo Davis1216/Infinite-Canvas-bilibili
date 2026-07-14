@@ -147,17 +147,167 @@
         return points.map((point, index) => `${index ? 'L' : 'M'}${point[0].toFixed(1)} ${point[1].toFixed(1)}`).join(' ');
     }
 
+    function svgLocalPoint(svg, event){
+        const point = svg.createSVGPoint();
+        point.x = event.clientX;
+        point.y = event.clientY;
+        return point.matrixTransform(svg.getScreenCTM().inverse());
+    }
+
+    function positionTooltip(host, tooltip, clientX, clientY, html){
+        if(!tooltip) return;
+        tooltip.innerHTML = html;
+        tooltip.hidden = false;
+        tooltip.style.left = `${Math.max(86, Math.min(window.innerWidth - 86, clientX))}px`;
+        tooltip.style.top = `${Math.max(68, clientY)}px`;
+    }
+
+    function hideTooltip(){
+        const tooltip = $('chartTooltip');
+        if(tooltip) tooltip.hidden = true;
+    }
+
+    function animateSvgLines(svg){
+        requestAnimationFrame(() => {
+            svg.querySelectorAll('.metric-line').forEach((path, index) => {
+                const len = Math.ceil(path.getTotalLength?.() || 0);
+                if(!len) return;
+                path.style.setProperty('--line-length', len);
+                path.style.strokeDasharray = String(len);
+                path.style.strokeDashoffset = String(len);
+                path.style.animation = 'none';
+                path.getBoundingClientRect();
+                path.style.animation = `usage-line-draw .72s var(--ease) both ${index * 70}ms`;
+            });
+        });
+    }
+
+    function setTrendMetricFocus(svg, legend, metricKey){
+        svg.classList.toggle('has-focus', Boolean(metricKey));
+        legend?.classList.toggle('has-focus', Boolean(metricKey));
+        svg.querySelectorAll('.metric-line').forEach(el => el.classList.toggle('is-active', el.dataset.metric === metricKey));
+        legend?.querySelectorAll('.trend-legend-item').forEach(el => el.classList.toggle('is-active', el.dataset.metric === metricKey));
+    }
+
+    function bindTrendInteractions(svg, legend, rows, metrics, pointsByMetric, pad, width, height, currency){
+        const hoverLine = svg.querySelector('.hover-line');
+        const tooltip = $('chartTooltip');
+        const host = svg.closest('.chart-panel') || svg.parentElement;
+        const plotLeft = pad.left;
+        const plotRight = width - pad.right;
+        const step = rows.length <= 1 ? 1 : (plotRight - plotLeft) / (rows.length - 1);
+        legend?.querySelectorAll('.trend-legend-item').forEach(item => {
+            item.onmouseenter = () => setTrendMetricFocus(svg, legend, item.dataset.metric);
+            item.onmouseleave = () => setTrendMetricFocus(svg, legend, '');
+        });
+        svg.onmouseleave = () => {
+            svg.classList.remove('has-hover');
+            setTrendMetricFocus(svg, legend, '');
+            if(hoverLine) hoverLine.setAttribute('visibility', 'hidden');
+            svg.querySelectorAll('.metric-dot').forEach(dot => dot.classList.remove('is-nearest'));
+            hideTooltip();
+        };
+        svg.onmousemove = event => {
+            const p = svgLocalPoint(svg, event);
+            if(p.x < plotLeft || p.x > plotRight || p.y < pad.top - 12 || p.y > height - pad.bottom + 12){
+                svg.onmouseleave();
+                return;
+            }
+            const rowIndex = Math.max(0, Math.min(rows.length - 1, Math.round((p.x - plotLeft) / step)));
+            const row = rows[rowIndex];
+            const x = rows.length <= 1 ? plotLeft : plotLeft + rowIndex * step;
+            svg.classList.add('has-hover');
+            if(hoverLine){
+                hoverLine.setAttribute('x1', x);
+                hoverLine.setAttribute('x2', x);
+                hoverLine.setAttribute('visibility', 'visible');
+            }
+            const nearestMetric = metrics
+                .map(metric => {
+                    const pt = pointsByMetric[metric.field]?.[rowIndex];
+                    return pt ? {metric, dist:Math.abs(pt[1] - p.y)} : null;
+                })
+                .filter(Boolean)
+                .sort((a,b) => a.dist - b.dist)[0]?.metric;
+            setTrendMetricFocus(svg, legend, nearestMetric?.field || '');
+            svg.querySelectorAll('.metric-dot').forEach(dot => dot.classList.toggle('is-nearest', Number(dot.dataset.row) === rowIndex));
+            const detailRows = metrics.map(metric => `
+                <div><span>${escapeHtml(metric.label)}</span><b>${escapeHtml(metric.value(row))}</b></div>
+            `).join('');
+            positionTooltip(host, tooltip, event.clientX, event.clientY, `<strong>${escapeHtml(row.date || '')}</strong>${detailRows}`);
+        };
+    }
+
+    function setPieFocus(svg, legend, index){
+        const active = index !== '' && index != null;
+        svg.classList.toggle('has-focus', active);
+        legend?.classList.toggle('has-focus', active);
+        svg.querySelectorAll('.pie-slice').forEach(el => el.classList.toggle('is-active', el.dataset.index === String(index)));
+        legend?.querySelectorAll('.legend-row').forEach(el => el.classList.toggle('is-active', el.dataset.index === String(index)));
+    }
+
+    function bindPieInteractions(svg, legend, rows, total, currency){
+        const host = svg.closest('.panel') || svg.parentElement;
+        const tooltip = $('chartTooltip');
+        const leave = () => {
+            setPieFocus(svg, legend, '');
+            hideTooltip();
+        };
+        svg.onmouseleave = leave;
+        legend.onmouseleave = leave;
+        const show = (index, event) => {
+            const row = rows[index];
+            if(!row) return;
+            setPieFocus(svg, legend, index);
+            const pct = ((Number(row.value || 0) / total) * 100).toFixed(1);
+            const value = row.is_request_fallback ? `${compact(row.value)} 次` : money(row.value, currency);
+            positionTooltip(host, tooltip, event.clientX, event.clientY, `
+                <strong>${escapeHtml(row.label)}</strong>
+                <div><span>占比</span><b>${pct}%</b></div>
+                <div><span>${row.is_request_fallback ? '请求' : '费用'}</span><b>${escapeHtml(value)}</b></div>
+            `);
+        };
+        svg.querySelectorAll('.pie-slice').forEach(slice => {
+            slice.onmouseenter = event => show(Number(slice.dataset.index), event);
+            slice.onmousemove = event => show(Number(slice.dataset.index), event);
+            slice.onfocus = event => show(Number(slice.dataset.index), event);
+            slice.onblur = leave;
+        });
+        legend.querySelectorAll('.legend-row').forEach(row => {
+            row.onmouseenter = event => show(Number(row.dataset.index), event);
+            row.onmousemove = event => show(Number(row.dataset.index), event);
+        });
+    }
+
     function drawTrend(rows, currency){
         const svg = $('trendChart');
+        const legend = $('trendLegend');
         const width = 760, height = 260;
         const pad = {left:44,right:18,top:18,bottom:34};
         if(!rows.length){
             svg.innerHTML = `<text x="380" y="132" text-anchor="middle">暂无趋势数据</text>`;
+            if(legend) legend.innerHTML = '';
             return;
         }
-        const costPts = scaledPoints(rows, 'cost', width, height, pad);
-        const reqPts = scaledPoints(rows, 'requests', width, height, pad);
-        const tokenPts = scaledPoints(rows, 'tokens', width, height, pad);
+        const metrics = [
+            {field:'cost', label:'费用', className:'cost-line', color:'var(--usage-blue)', value:row => money(row.cost, currency)},
+            {field:'requests', label:'请求', className:'request-line', color:'var(--usage-green)', value:row => `${compact(row.requests)} 次`},
+            {field:'tokens', label:'GPT Token', className:'token-line', color:'var(--usage-amber)', value:row => `${compact(row.tokens)} token`},
+            {field:'images', label:'生图次数', className:'image-line', color:'#e11d48', value:row => `${compact(row.images)} 次`},
+        ].map(metric => {
+            const values = rows.map(row => Number(row[metric.field] || 0));
+            const activeRows = rows.filter(row => Number(row[metric.field] || 0) > 0);
+            return {...metric, max:Math.max(0, ...values), activeRows};
+        }).filter(metric => metric.max > 0);
+        if(legend){
+            legend.innerHTML = metrics.map(metric => `
+                <span class="trend-legend-item" data-metric="${escapeHtml(metric.field)}">
+                    <i style="background:${metric.color}"></i>
+                    <b>${escapeHtml(metric.label)}</b>
+                    <small>峰值 ${escapeHtml(metric.value({[metric.field]:metric.max}))}</small>
+                </span>
+            `).join('') || '<span class="trend-legend-item">暂无有效指标</span>';
+        }
         const grid = [0,1,2,3].map(i => {
             const y = pad.top + i * ((height - pad.top - pad.bottom) / 3);
             return `<line class="grid-line" x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}"></line>`;
@@ -168,14 +318,27 @@
                 const x = rows.length <= 1 ? pad.left : pad.left + index * ((width - pad.left - pad.right) / (rows.length - 1));
                 return `<text x="${x}" y="${height - 10}" text-anchor="${i === 0 ? 'start' : i === arr.length - 1 ? 'end' : 'middle'}">${escapeHtml(String(row.date || '').slice(5))}</text>`;
             }).join('');
+        const pointsByMetric = {};
+        const metricShapes = metrics.map((metric, metricIndex) => {
+            const pts = scaledPoints(rows, metric.field, width, height, pad);
+            pointsByMetric[metric.field] = pts;
+            const activeIndexes = rows.map((row,index) => Number(row[metric.field] || 0) > 0 ? index : -1).filter(index => index >= 0);
+            const dots = activeIndexes.map(index => `<circle class="metric-dot ${metric.className}-dot" data-metric="${escapeHtml(metric.field)}" data-row="${index}" cx="${pts[index][0].toFixed(1)}" cy="${pts[index][1].toFixed(1)}" r="4"><title>${escapeHtml(rows[index].date)} · ${escapeHtml(metric.label)} ${escapeHtml(metric.value(rows[index]))}</title></circle>`).join('');
+            if(activeIndexes.length <= 1){
+                return dots;
+            }
+            return `<path class="metric-line ${metric.className}" data-metric="${escapeHtml(metric.field)}" style="animation-delay:${metricIndex * 70}ms" d="${pathFromPoints(pts)}"></path>${dots}`;
+        }).join('');
         svg.innerHTML = `
             ${grid}
-            <path class="token-line" d="${pathFromPoints(tokenPts)}"></path>
-            <path class="request-line" d="${pathFromPoints(reqPts)}"></path>
-            <path class="cost-line" d="${pathFromPoints(costPts)}"></path>
+            ${metricShapes}
             ${labels}
-            <text x="${pad.left}" y="12">${escapeHtml(currency)} / requests / tokens</text>
+            <line class="hover-line" x1="${pad.left}" x2="${pad.left}" y1="${pad.top}" y2="${height - pad.bottom}" visibility="hidden"></line>
+            <rect class="hover-band" x="${pad.left}" y="${pad.top - 12}" width="${width - pad.left - pad.right}" height="${height - pad.top - pad.bottom + 24}"></rect>
+            <text x="${pad.left}" y="12">各指标独立归一化，仅看各自走势</text>
         `;
+        animateSvgLines(svg);
+        bindTrendInteractions(svg, legend, rows, metrics, pointsByMetric, pad, width, height, currency);
     }
 
     function drawPie(svgId, legendId, rows, currency){
@@ -200,12 +363,12 @@
             const pct = (Number(row.value || 0) / total) * 100;
             const label = row.is_request_fallback ? `${compact(row.value)} 次` : money(row.value, currency);
             if(pct >= 99.999){
-                return `<circle class="pie-slice" cx="${cx}" cy="${cy}" r="${radius}" fill="${colors[index % colors.length]}"><title>${escapeHtml(row.label)} ${pct.toFixed(1)}% · ${label}</title></circle>`;
+                return `<circle class="pie-slice" data-index="${index}" tabindex="0" cx="${cx}" cy="${cy}" r="${radius}" fill="${colors[index % colors.length]}" style="animation-delay:${index * 45}ms"><title>${escapeHtml(row.label)} ${pct.toFixed(1)}% · ${label}</title></circle>`;
             }
             const slice = (Number(row.value || 0) / total) * Math.PI * 2;
             const path = slicePath(angle, angle + slice);
             angle += slice;
-            return `<path class="pie-slice" d="${path}" fill="${colors[index % colors.length]}"><title>${escapeHtml(row.label)} ${pct.toFixed(1)}% · ${label}</title></path>`;
+            return `<path class="pie-slice" data-index="${index}" tabindex="0" d="${path}" fill="${colors[index % colors.length]}" style="animation-delay:${index * 45}ms"><title>${escapeHtml(row.label)} ${pct.toFixed(1)}% · ${label}</title></path>`;
         }).join('');
         const leadPct = ((Number(rows[0]?.value || 0) / total) * 100).toFixed(1);
         svg.innerHTML = `
@@ -215,12 +378,13 @@
             <text x="${cx}" y="${cy + radius + 22}" text-anchor="middle" fill="var(--usage-muted)" font-size="10" font-weight="850">Top ${leadPct}%</text>
         `;
         legend.innerHTML = rows.slice(0,8).map((row,index) => `
-            <div class="legend-row">
+            <div class="legend-row" data-index="${index}">
                 <span class="legend-dot" style="background:${colors[index % colors.length]}"></span>
                 <span class="legend-label" title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</span>
                 <span>${((Number(row.value || 0) / total) * 100).toFixed(1)}% · ${row.is_request_fallback ? `${compact(row.value)}次` : money(row.value, currency)}</span>
             </div>
         `).join('');
+        bindPieInteractions(svg, legend, rows, total, currency);
     }
 
     function renderTopModels(rows, currency){

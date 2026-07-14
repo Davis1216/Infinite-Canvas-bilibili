@@ -364,7 +364,7 @@ const MS_GEN_MODELS = {
     custom: { label:tr('smart.custom') || '自定义', modelId:'', acceptsImage:true, endpoint:'/api/ms/generate' }
 };
 const SIZE_MAP = {
-    square: {'1k':'1024x1024','2k':'2048x2048','4k':'4096x4096'},
+    square: {'1k':'1024x1024','2k':'2048x2048','4k':'2880x2880'},
     portrait: {'1k':'1024x1536','2k':'1360x2048','4k':'2352x3520'},
     portrait43: {'1k':'1008x1344','2k':'1536x2048','4k':'2448x3264'},
     landscape43: {'1k':'1344x1008','2k':'2048x1536','4k':'3264x2448'},
@@ -2323,6 +2323,40 @@ function providerImageModels(providerId){
     if(providerId === 'volcengine') return volcengineProvider().image_models || [];
     return (apiProviders || []).find(p => p.id === providerId)?.image_models || [];
 }
+function smartModelResolutionTag(model){
+    const match = String(model || '').trim().match(/(?:^|[-_])(1k|2k|4k)$/i);
+    return match ? match[1].toLowerCase() : '';
+}
+function smartModelBaseName(model){
+    return String(model || '').trim().replace(/[-_](?:1k|2k|4k)$/i, '');
+}
+function smartModelForResolution(providerId, model, resolutionValue){
+    const res = String(resolutionValue || '').toLowerCase();
+    if(!model || !['1k','2k','4k'].includes(res)) return model;
+    const list = providerImageModels(providerId);
+    const base = smartModelBaseName(model);
+    const candidates = res === '1k'
+        ? [base, `${base}-1k`, `${base}_1k`]
+        : [`${base}-${res}`, `${base}_${res}`];
+    const byLower = new Map((list || []).map(item => [String(item).toLowerCase(), item]));
+    return candidates.map(item => byLower.get(item.toLowerCase())).find(Boolean) || model;
+}
+function syncSmartResolutionFromModel(target=settings){
+    const tag = smartModelResolutionTag(target?.model);
+    if(!tag) return false;
+    target.resolution = tag;
+    if(!target.ratio) target.ratio = 'square';
+    return true;
+}
+function syncSmartModelForResolution(target=settings){
+    if(!target || target.engine !== 'api' || target.apiKind === 'video') return false;
+    const next = smartModelForResolution(target.provider_id, target.model, target.resolution);
+    if(next && next !== target.model){
+        target.model = next;
+        return true;
+    }
+    return false;
+}
 // 即梦图生图（挂了参考图）不支持 3.0/3.1，此时从模型下拉里隐藏它们。
 const JIMENG_IMAGE2IMAGE_UNSUPPORTED = ['3.0', '3.1'];
 function jimengImageEditMode(){
@@ -2407,9 +2441,11 @@ function sanitizeSmartApiSelection(target=settings){
         if(models.length && !models.includes(target.model)) target.model = models[0] || '';
     }
     if((target.engine || 'api') === 'api' && (target.apiKind || 'image') !== 'video'){
+        syncSmartResolutionFromModel(target);
         const allowAuto = isGptImageAutoSizeModel(target.model) && providerAllowsAutoImageSize(target.provider_id);
         if(!target.resolution) target.resolution = allowAuto ? 'auto' : '1k';
         if(!allowAuto && target.resolution === 'auto') target.resolution = '1k';
+        syncSmartModelForResolution(target);
     }
     if(target.videoProvider){
         const models = providerVideoModels(target.videoProvider);
@@ -3792,8 +3828,10 @@ function setDynamicSetting(key, value){
     if(key === 'resolution'){
         if(settings.resolution === 'custom') settings.ratio = '';
         else if(!settings.ratio) settings.ratio = 'square';
+        syncSmartModelForResolution(settings);
     }
     if(key === 'ratio') applySourceRatioToSettings('');
+    if(key === 'model') syncSmartResolutionFromModel(settings);
     if(key === 'msResolution'){
         if(settings.msResolution === 'custom') settings.msRatio = '';
         else if(!settings.msRatio) settings.msRatio = 'square';
@@ -14497,6 +14535,7 @@ function comfyFieldKind(field){
     return 'setting';
 }
 async function runApiGeneration(prompt, refs, runSettings=settings){
+    sanitizeSmartApiSelection(runSettings);
     if(!runSettings.provider_id || !runSettings.model) throw new Error(tr('smart.errNoApiModel'));
     const count = Math.max(1, Math.min(8, Number(runSettings.count || 1)));
     const payload = {prompt, provider_id:runSettings.provider_id, model:runSettings.model, size:sizeForRun(runSettings), quality:runSettings.quality || 'auto', temperature:normalizedImageTemperature(runSettings.temperature), n:1, reference_images:imageRefsOnly(refs).slice(0, SMART_REFERENCE_IMAGE_MAX)};

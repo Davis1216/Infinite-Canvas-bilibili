@@ -183,6 +183,7 @@ html.theme-dark .filter-bar { background:rgba(23,29,41,.72); }
     grid-template-columns:minmax(0,1fr) minmax(0,1fr);
 }
 .panel { min-width:0; padding:14px; }
+.chart-panel { position:relative; }
 .panel-head {
     display:flex;
     align-items:flex-start;
@@ -212,17 +213,80 @@ html.theme-dark .filter-bar { background:rgba(23,29,41,.72); }
     height:280px;
     display:block;
 }
+.trend-legend {
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin:2px 0 0;
+    padding-top:10px;
+    border-top:1px solid var(--usage-line);
+}
+.trend-legend-item {
+    height:26px;
+    padding:0 9px;
+    border:1px solid var(--usage-line);
+    border-radius:999px;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    color:var(--usage-muted);
+    background:var(--usage-panel-2);
+    font-size:10px;
+    font-weight:850;
+    transition:transform .16s var(--ease), border-color .16s var(--ease), background .16s var(--ease), opacity .16s var(--ease);
+}
+.trend-legend-item:hover,
+.trend-legend-item.is-active {
+    transform:translateY(-1px);
+    border-color:var(--usage-line-2);
+    background:var(--usage-soft);
+}
+.trend-legend.has-focus .trend-legend-item:not(.is-active) { opacity:.54; }
+.trend-legend-item i { width:10px; height:10px; border-radius:999px; }
+.trend-legend-item b { color:var(--usage-text); }
 .line-chart text { fill:var(--usage-muted); font-size:10px; font-weight:800; }
 .line-chart .grid-line { stroke:var(--usage-line); stroke-width:1; }
-.line-chart .cost-line { fill:none; stroke:var(--usage-blue); stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
-.line-chart .request-line { fill:none; stroke:var(--usage-green); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; opacity:.86; }
-.line-chart .token-line { fill:none; stroke:var(--usage-amber); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; opacity:.82; }
+.line-chart .cost-line,
+.line-chart .request-line,
+.line-chart .token-line,
+.line-chart .image-line {
+    fill:none;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+    transition:opacity .16s var(--ease), stroke-width .16s var(--ease), filter .16s var(--ease);
+    animation:usage-line-draw .72s var(--ease) both;
+}
+.line-chart .cost-line { stroke:var(--usage-blue); stroke-width:3; }
+.line-chart .request-line { stroke:var(--usage-green); stroke-width:2; opacity:.86; }
+.line-chart .token-line { stroke:var(--usage-amber); stroke-width:2; opacity:.82; }
+.line-chart .image-line { stroke:#e11d48; stroke-width:2; opacity:.78; }
+.line-chart.has-focus .metric-line:not(.is-active),
+.line-chart.has-hover .metric-line:not(.is-active) { opacity:.2; }
+.line-chart .metric-line.is-active { stroke-width:4; opacity:1; filter:drop-shadow(0 4px 8px rgba(15,23,42,.18)); }
+.line-chart .cost-line-dot { fill:var(--usage-blue); }
+.line-chart .request-line-dot { fill:var(--usage-green); }
+.line-chart .token-line-dot { fill:var(--usage-amber); }
+.line-chart .image-line-dot { fill:#e11d48; }
+.line-chart .metric-dot {
+    transition:r .16s var(--ease), opacity .16s var(--ease);
+}
+.line-chart.has-hover .metric-dot:not(.is-nearest) { opacity:.34; }
+.line-chart .metric-dot.is-nearest { r:6; stroke:var(--usage-panel); stroke-width:2; opacity:1; }
+.line-chart .hover-line { stroke:var(--usage-line-2); stroke-width:1; stroke-dasharray:4 5; pointer-events:none; }
+.line-chart .hover-band { fill:transparent; cursor:crosshair; }
 .pie-wrap { display:grid; grid-template-columns:210px minmax(0,1fr); gap:12px; align-items:center; }
 .pie-wrap.compact { grid-template-columns:190px minmax(0,1fr); }
 .pie-chart { width:190px; height:190px; max-width:100%; display:block; overflow:visible; }
 .pie-wrap.compact .pie-chart { width:170px; height:170px; }
-.pie-chart .pie-slice { transition:opacity .16s var(--ease); transform-origin:center; }
-.pie-chart .pie-slice:hover { opacity:.84; }
+.pie-chart .pie-slice {
+    cursor:pointer;
+    transition:opacity .16s var(--ease), transform .18s var(--ease), filter .18s var(--ease);
+    transform-box:fill-box;
+    transform-origin:center;
+    animation:usage-pie-in .52s var(--ease) both;
+}
+.pie-chart.has-focus .pie-slice:not(.is-active) { opacity:.24; }
+.pie-chart .pie-slice.is-active { opacity:1; transform:scale(1.035); filter:drop-shadow(0 8px 14px rgba(15,23,42,.2)); }
 .legend { min-width:0; display:flex; flex-direction:column; gap:7px; }
 .legend-row {
     display:grid;
@@ -232,9 +296,35 @@ html.theme-dark .filter-bar { background:rgba(23,29,41,.72); }
     color:var(--usage-muted);
     font-size:11px;
     font-weight:800;
+    border-radius:8px;
+    padding:4px 6px;
+    margin:0 -6px;
+    transition:background .16s var(--ease), transform .16s var(--ease), opacity .16s var(--ease);
 }
+.legend-row:hover,
+.legend-row.is-active { background:var(--usage-soft); transform:translateX(2px); }
+.legend.has-focus .legend-row:not(.is-active) { opacity:.48; }
 .legend-dot { width:10px; height:10px; border-radius:3px; }
 .legend-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--usage-text); }
+.chart-tooltip {
+    position:fixed;
+    z-index:20;
+    min-width:150px;
+    max-width:260px;
+    padding:9px 10px;
+    border:1px solid var(--usage-line);
+    border-radius:8px;
+    background:var(--usage-panel);
+    color:var(--usage-text);
+    box-shadow:0 16px 36px var(--usage-shadow);
+    pointer-events:none;
+    transform:translate(-50%, -112%);
+    font-size:11px;
+    font-weight:800;
+}
+.chart-tooltip strong { display:block; margin-bottom:6px; font-size:12px; }
+.chart-tooltip div { display:flex; justify-content:space-between; gap:14px; color:var(--usage-muted); line-height:1.55; }
+.chart-tooltip b { color:var(--usage-text); }
 
 .rank-list { display:flex; flex-direction:column; gap:9px; }
 .rank-row {
@@ -415,6 +505,15 @@ td { color:var(--usage-text); font-weight:750; }
     .price-row,.model-price-row { grid-template-columns:1fr 1fr; }
     .price-row .row-title { grid-column:1 / -1; }
     .remove-price-btn { width:100%; }
+}
+
+@keyframes usage-line-draw {
+    from { stroke-dashoffset:var(--line-length, 0); }
+    to { stroke-dashoffset:0; }
+}
+@keyframes usage-pie-in {
+    from { opacity:0; transform:scale(.92); }
+    to { opacity:1; transform:scale(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {

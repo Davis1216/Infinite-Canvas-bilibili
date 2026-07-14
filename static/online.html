@@ -19,7 +19,7 @@
     <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
-    <script src="/static/js/i18n.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1784008200"></script>
     <script src="/static/js/image-preview.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/history-bulk-manager.js?v=2026.07.4.2.1783154122"></script>
     <style>
@@ -64,6 +64,34 @@
         .masonry-item { aspect-ratio:1/1; border-radius:24px; overflow:hidden; background:#fff; border:1px solid #f1f5f9; transition:all .5s var(--easing); }
         .masonry-item:hover { transform:translateY(-6px); box-shadow:0 20px 40px rgba(0,0,0,.08); }
         .gallery-lightbox { background:rgba(255,255,255,.99); backdrop-filter:blur(22px) saturate(1.05); }
+        .prompt-library-btn { height:28px; padding:0 10px; border:1px solid #e5e7eb; border-radius:999px; background:#fff; color:#64748b; display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; transition:all .2s var(--easing); }
+        .prompt-library-btn:hover { color:#111827; border-color:#111827; transform:translateY(-1px); }
+        .prompt-modal { background:rgba(15,23,42,.28); backdrop-filter:blur(16px); }
+        .prompt-panel { width:min(980px,calc(100vw - 32px)); max-height:min(760px,calc(100vh - 48px)); background:#fff; border:1px solid #edf2f7; border-radius:28px; box-shadow:0 28px 80px rgba(15,23,42,.18); display:flex; flex-direction:column; overflow:hidden; }
+        .prompt-panel-head { padding:18px; border-bottom:1px solid #eef2f7; display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+        .prompt-panel-head h3 { margin:0; font-size:18px; font-weight:950; letter-spacing:-.04em; }
+        .prompt-panel-head p { margin:4px 0 0; color:#94a3b8; font-size:11px; font-weight:800; }
+        .prompt-picker-body { min-height:0; display:grid; grid-template-columns:220px minmax(0,1fr); gap:0; }
+        .prompt-picker-side { padding:14px; border-right:1px solid #eef2f7; background:#f8fafc; overflow:auto; }
+        .prompt-picker-main { padding:14px; min-width:0; overflow:auto; }
+        .prompt-picker-search { width:100%; height:38px; border:1px solid #e2e8f0; border-radius:14px; padding:0 12px; outline:none; font-size:12px; font-weight:800; background:#fff; }
+        .prompt-picker-search:focus { border-color:#111827; box-shadow:0 0 0 1px #111827; }
+        .prompt-lib-list,.prompt-cat-list { display:flex; flex-direction:column; gap:6px; margin-top:12px; }
+        .prompt-lib-item,.prompt-cat-item { min-height:34px; border:1px solid transparent; border-radius:12px; padding:0 10px; display:flex; align-items:center; justify-content:space-between; gap:8px; color:#64748b; font-size:11px; font-weight:850; text-align:left; }
+        .prompt-lib-item.active,.prompt-cat-item.active { background:#fff; border-color:#e2e8f0; color:#111827; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+        .prompt-lib-item small,.prompt-cat-item small { min-width:22px; height:20px; border-radius:999px; background:#e2e8f0; color:#64748b; display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:950; }
+        .prompt-item-list { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+        .prompt-item-card { border:1px solid #e2e8f0; border-radius:16px; padding:12px; background:#fff; transition:all .18s var(--easing); }
+        .prompt-item-card:hover { border-color:#111827; box-shadow:0 8px 24px rgba(15,23,42,.06); }
+        .prompt-item-top { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
+        .prompt-item-title { min-width:0; font-size:13px; font-weight:950; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .prompt-item-tag { flex:0 0 auto; border-radius:999px; background:#eef2ff; color:#475569; padding:2px 8px; font-size:10px; font-weight:900; }
+        .prompt-item-text { color:#334155; font-size:12px; line-height:1.55; max-height:58px; overflow:hidden; }
+        .prompt-item-actions { margin-top:10px; display:flex; gap:8px; justify-content:flex-end; }
+        .prompt-action-btn { height:30px; border:1px solid #e2e8f0; border-radius:10px; padding:0 10px; font-size:10px; font-weight:950; color:#475569; background:#f8fafc; }
+        .prompt-action-btn.primary { background:#111827; color:#fff; border-color:#111827; }
+        .prompt-picker-empty { min-height:180px; border:1px dashed #cbd5e1; border-radius:16px; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:12px; font-weight:850; }
+        @media (max-width:720px){ .prompt-picker-body{ grid-template-columns:1fr; } .prompt-picker-side{ border-right:0; border-bottom:1px solid #eef2f7; max-height:260px; } }
         @keyframes fadeIn { from{opacity:0} to{opacity:1} }
     </style>
     <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
@@ -93,6 +121,10 @@
                     <div class="flex items-center gap-2 text-gray-400">
                         <i data-lucide="terminal" class="w-3.5 h-3.5"></i>
                         <span class="text-[10px] font-black uppercase tracking-widest">Prompt</span>
+                        <button id="openPromptLibraryBtn" class="prompt-library-btn ml-auto" type="button" onclick="openPromptLibraryPicker()">
+                            <i data-lucide="library" class="w-3.5 h-3.5"></i>
+                            <span>提示词库</span>
+                        </button>
                     </div>
                     <textarea id="promptInput" rows="5" class="nano-input w-full p-6 rounded-3xl text-sm outline-none resize-none placeholder-gray-300" placeholder="输入想生成或编辑的画面..." data-i18n-placeholder="online.promptPlaceholder"></textarea>
                 </section>
@@ -225,6 +257,30 @@
         </div>
     </div>
 
+    <div id="promptLibraryModal" class="hidden fixed inset-0 z-[60] prompt-modal items-center justify-center p-4" onclick="handlePromptLibraryOutside(event)">
+        <div class="prompt-panel" onclick="event.stopPropagation()">
+            <header class="prompt-panel-head">
+                <div>
+                    <h3>选择提示词</h3>
+                    <p>从素材库的提示词库插入到在线生图 Prompt</p>
+                </div>
+                <button class="w-10 h-10 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-500 hover:text-black hover:border-black" type="button" onclick="closePromptLibraryPicker()" title="关闭">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </header>
+            <div class="prompt-picker-body">
+                <aside class="prompt-picker-side">
+                    <input id="promptLibrarySearch" class="prompt-picker-search" type="search" placeholder="搜索提示词">
+                    <div id="promptLibraryList" class="prompt-lib-list"></div>
+                    <div id="promptCategoryList" class="prompt-cat-list"></div>
+                </aside>
+                <main class="prompt-picker-main">
+                    <div id="promptItemList" class="prompt-item-list"></div>
+                </main>
+            </div>
+        </div>
+    </div>
+
     <script>
         lucide.createIcons();
         function tr(key){ return window.StudioI18n ? StudioI18n.t(key) : key; }
@@ -261,12 +317,17 @@
         let outputCount = 1;
         let models = {gpt:'gpt-image-2', nano:'nano-banana-pro'};
         let allHistory = [], currentIndex = 0, currentResult = null, currentLightboxData = null, isLoading = false;
+        let promptLibraries = [];
+        let promptLibraryLoadedAt = 0;
+        let activePromptLibraryId = '';
+        let activePromptCategory = 'all';
+        let promptLibraryQuery = '';
         const PAGE_SIZE = 24;
         const SIZE_OPTIONS = {
             square: [
                 ['1024x1024', '1k'],
                 ['2048x2048', '2k'],
-                ['3840x2160', '4k']
+                ['2880x2880', '4k']
             ],
             portrait: [
                 ['1024x1536', '1k'],
@@ -318,6 +379,41 @@
         function providerModels(id){
             return uniqueModels(providerById(id)?.image_models || [models.gpt]);
         }
+        function modelResolutionTag(model){
+            const match = String(model || '').trim().match(/(?:^|[-_])(1k|2k|4k)$/i);
+            return match ? match[1].toLowerCase() : '';
+        }
+        function modelBaseName(model){
+            return String(model || '').trim().replace(/[-_](?:1k|2k|4k)$/i, '');
+        }
+        function modelForResolution(model, nextResolution, providerId = provider){
+            const res = String(nextResolution || '').toLowerCase();
+            if(!model || !['1k','2k','4k'].includes(res) || isRunningHubProvider(providerId)) return model;
+            const list = providerModels(providerId);
+            const base = modelBaseName(model);
+            const candidates = res === '1k'
+                ? [base, `${base}-1k`, `${base}_1k`]
+                : [`${base}-${res}`, `${base}_${res}`];
+            const byLower = new Map(list.map(item => [String(item).toLowerCase(), item]));
+            return candidates.map(item => byLower.get(item.toLowerCase())).find(Boolean) || model;
+        }
+        function syncSelectedModelForResolution(){
+            const next = modelForResolution(selectedModel, resolution, provider);
+            if(next && next !== selectedModel){
+                selectedModel = next;
+                return true;
+            }
+            return false;
+        }
+        function syncResolutionFromModel(model){
+            const tag = modelResolutionTag(model);
+            if(!tag) return false;
+            resolution = tag;
+            if(!ratio) ratio = 'square';
+            customWidth = '';
+            customHeight = '';
+            return true;
+        }
         /* ---- RunningHub：模型下拉来自 API 设置里配置的工作流 / AI 应用，而非通用 image_models ----
          * 与智能画布一致：value=app:ID / workflow:ID，后端 generate_ai_image 走 RH 工作流运行路径。 */
         function runningHubEntryId(entry, kind){
@@ -354,7 +450,7 @@
                     : `<option value="">${escapeHtml(tr('online.rhNoEntries'))}</option>`;
             } else {
                 const modelsForProvider = providerModels(provider);
-                if(!modelsForProvider.includes(selectedModel)) selectedModel = modelsForProvider[0] || models.gpt;
+                if(!modelsForProvider.includes(selectedModel)) selectedModel = modelForResolution(modelsForProvider[0] || models.gpt, resolution, provider);
                 modelSelect.innerHTML = modelsForProvider.map(m => `<option value="${escapeHtml(m)}" ${m === selectedModel ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
             }
             updateAdaptivePanel();
@@ -428,7 +524,7 @@
                 models.nano = imageModels.find(m => m.toLowerCase().includes('nano')) || 'nano-banana-pro';
                 models.gpt = imageModels.find(m => !m.toLowerCase().includes('nano')) || cfg.image_model || 'gpt-image-2';
                 apiProviders = Array.isArray(cfg.api_providers) ? cfg.api_providers : [];
-                selectedModel = providerModels(provider)[0] || models.gpt;
+                selectedModel = modelForResolution(providerModels(provider)[0] || models.gpt, resolution, provider);
             } catch(e) {}
             renderProviderControls();
         }
@@ -458,13 +554,169 @@
 
         function setProvider(next){
             provider = next;
-            selectedModel = providerModels(provider)[0] || selectedModel;
+            selectedModel = modelForResolution(providerModels(provider)[0] || selectedModel, resolution, provider);
             renderProviderControls();
         }
         function setModel(next){
             selectedModel = next;
+            if(syncResolutionFromModel(next)) updateSizeUI();
+            updateAdaptivePanel();
         }
         function escapeHtml(str){ return String(str || '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+        function promptItemText(item){
+            return String(item?.positive || item?.text || item?.prompt || '').trim();
+        }
+        function activePromptLibrary(){
+            return promptLibraries.find(lib => lib.id === activePromptLibraryId) || promptLibraries[0] || {id:'system', name:'系统提示词库', items:[], categories:[]};
+        }
+        function promptCategoryName(lib, categoryId){
+            if(categoryId === 'all') return '全部提示词';
+            const cat = (lib?.categories || []).find(item => item.id === categoryId);
+            return cat?.name || categoryId || '未分组';
+        }
+        async function loadPromptLibraries(force=false){
+            const fresh = Date.now() - promptLibraryLoadedAt < 30000;
+            if(promptLibraries.length && fresh && !force) return;
+            const data = await fetch('/api/prompt-libraries').then(r => r.ok ? r.json() : {library:{libraries:[]}});
+            promptLibraries = data.library?.libraries || [];
+            promptLibraryLoadedAt = Date.now();
+            activePromptLibraryId = data.library?.active_library_id || promptLibraries[0]?.id || 'system';
+            activePromptCategory = 'all';
+        }
+        function filteredPromptItems(){
+            const lib = activePromptLibrary();
+            const query = promptLibraryQuery.trim().toLowerCase();
+            return (lib.items || []).filter(item => {
+                if(activePromptCategory !== 'all' && item.category !== activePromptCategory) return false;
+                if(!query) return true;
+                return `${item.name || ''} ${item.scene || ''} ${promptItemText(item)} ${item.negative || ''}`.toLowerCase().includes(query);
+            });
+        }
+        function renderPromptLibraryPicker(){
+            const lib = activePromptLibrary();
+            const libraryList = document.getElementById('promptLibraryList');
+            const categoryList = document.getElementById('promptCategoryList');
+            const itemList = document.getElementById('promptItemList');
+            if(!libraryList || !categoryList || !itemList) return;
+            libraryList.innerHTML = promptLibraries.map(library => `
+                <button type="button" class="prompt-lib-item ${library.id === lib.id ? 'active' : ''}" data-prompt-lib="${escapeHtml(library.id)}">
+                    <span>${escapeHtml(library.name || '提示词库')}</span>
+                    <small>${(library.items || []).length}</small>
+                </button>
+            `).join('') || '<div class="prompt-picker-empty">暂无提示词库</div>';
+            const cats = [{id:'all', name:'全部提示词'}].concat(lib.categories || []);
+            categoryList.innerHTML = cats.map(cat => {
+                const count = cat.id === 'all' ? (lib.items || []).length : (lib.items || []).filter(item => item.category === cat.id).length;
+                return `
+                    <button type="button" class="prompt-cat-item ${cat.id === activePromptCategory ? 'active' : ''}" data-prompt-cat="${escapeHtml(cat.id)}">
+                        <span>${escapeHtml(cat.name || cat.id)}</span>
+                        <small>${count}</small>
+                    </button>
+                `;
+            }).join('');
+            const items = filteredPromptItems();
+            itemList.innerHTML = items.map(item => {
+                const text = promptItemText(item);
+                return `
+                    <article class="prompt-item-card" data-prompt-id="${escapeHtml(item.id)}">
+                        <div class="prompt-item-top">
+                            <div class="prompt-item-title" title="${escapeHtml(item.name || '提示词')}">${escapeHtml(item.name || '提示词')}</div>
+                            <span class="prompt-item-tag">${escapeHtml(promptCategoryName(lib, item.category))}</span>
+                        </div>
+                        ${item.scene ? `<div class="text-[11px] font-bold text-slate-400 mb-1">${escapeHtml(item.scene)}</div>` : ''}
+                        <div class="prompt-item-text">${escapeHtml(text || '这个提示词暂无正文')}</div>
+                        <div class="prompt-item-actions">
+                            <button type="button" class="prompt-action-btn" data-prompt-replace="${escapeHtml(item.id)}">替换</button>
+                            <button type="button" class="prompt-action-btn primary" data-prompt-insert="${escapeHtml(item.id)}">插入</button>
+                        </div>
+                    </article>
+                `;
+            }).join('') || '<div class="prompt-picker-empty">没有匹配的提示词</div>';
+            if(window.lucide) lucide.createIcons();
+        }
+        async function openPromptLibraryPicker(){
+            try {
+                await loadPromptLibraries(true);
+                const modal = document.getElementById('promptLibraryModal');
+                modal.classList.replace('hidden','flex');
+                document.body.style.overflow = 'hidden';
+                const search = document.getElementById('promptLibrarySearch');
+                if(search) search.value = promptLibraryQuery = '';
+                renderPromptLibraryPicker();
+                setTimeout(() => search?.focus(), 50);
+            } catch(err) {
+                alert(`提示词库加载失败：${err.message || err}`);
+            }
+        }
+        function closePromptLibraryPicker(){
+            document.getElementById('promptLibraryModal')?.classList.replace('flex','hidden');
+            document.body.style.overflow = 'auto';
+        }
+        function handlePromptLibraryOutside(event){
+            if(event.target?.id === 'promptLibraryModal') closePromptLibraryPicker();
+        }
+        function findPromptItem(itemId){
+            const lib = activePromptLibrary();
+            return (lib.items || []).find(item => item.id === itemId);
+        }
+        function applyPromptLibraryItem(itemId, mode='insert'){
+            const item = findPromptItem(itemId);
+            const text = promptItemText(item);
+            if(!text) return;
+            const input = document.getElementById('promptInput');
+            if(!input) return;
+            if(mode === 'replace' || !input.value.trim()){
+                input.value = text;
+            } else {
+                const start = input.selectionStart ?? input.value.length;
+                const end = input.selectionEnd ?? input.value.length;
+                const before = input.value.slice(0, start);
+                const after = input.value.slice(end);
+                const prefix = before && !before.endsWith('\n') ? '\n' : '';
+                const suffix = after && !text.endsWith('\n') ? '\n' : '';
+                input.value = `${before}${prefix}${text}${suffix}${after}`;
+                const caret = (before + prefix + text).length;
+                input.setSelectionRange(caret, caret);
+            }
+            input.focus();
+            input.dispatchEvent(new Event('input', {bubbles:true}));
+            closePromptLibraryPicker();
+        }
+        document.addEventListener('click', event => {
+            const libBtn = event.target.closest?.('[data-prompt-lib]');
+            if(libBtn){
+                activePromptLibraryId = libBtn.dataset.promptLib || activePromptLibraryId;
+                activePromptCategory = 'all';
+                renderPromptLibraryPicker();
+                return;
+            }
+            const catBtn = event.target.closest?.('[data-prompt-cat]');
+            if(catBtn){
+                activePromptCategory = catBtn.dataset.promptCat || 'all';
+                renderPromptLibraryPicker();
+                return;
+            }
+            const insertBtn = event.target.closest?.('[data-prompt-insert]');
+            if(insertBtn){
+                applyPromptLibraryItem(insertBtn.dataset.promptInsert, 'insert');
+                return;
+            }
+            const replaceBtn = event.target.closest?.('[data-prompt-replace]');
+            if(replaceBtn){
+                applyPromptLibraryItem(replaceBtn.dataset.promptReplace, 'replace');
+            }
+        }, true);
+        document.addEventListener('input', event => {
+            if(event.target?.id === 'promptLibrarySearch'){
+                promptLibraryQuery = event.target.value || '';
+                renderPromptLibraryPicker();
+            }
+        });
+        document.addEventListener('keydown', event => {
+            if(event.key === 'Escape' && document.getElementById('promptLibraryModal')?.classList.contains('flex')){
+                closePromptLibraryPicker();
+            }
+        });
 
         function parseSizeValue(value){
             const match = String(value || '').trim().match(/^(\d+)\s*[xX*]\s*(\d+)$/);
@@ -529,6 +781,8 @@
                 customHeight = '';
                 if(ratio === '') ratio = 'square';
             }
+            const modelChanged = syncSelectedModelForResolution();
+            if(modelChanged) renderProviderControls();
             updateSizeUI();
         }
 

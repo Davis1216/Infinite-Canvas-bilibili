@@ -20,7 +20,7 @@
     <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/i18n.js?v=2026.07.4.2.1784008200"></script>
     <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
-    <link rel="stylesheet" href="/static/css/usage-dashboard.css?v=2026.07.14.9">
+    <link rel="stylesheet" href="/static/css/usage-dashboard.css?v=2026.07.14.10">
 </head>
 <body>
     <main class="usage-shell">
@@ -85,10 +85,12 @@
         <section class="chart-grid">
             <article class="panel chart-panel wide">
                 <div class="panel-head">
-                    <div><h2>趋势</h2><p>每日费用、请求和 token</p></div>
+                    <div><h2>趋势</h2><p>每日费用、请求、GPT token 和生图次数</p></div>
                     <span id="trendMeta" class="panel-badge">-</span>
                 </div>
                 <svg id="trendChart" class="line-chart" viewBox="0 0 760 260" role="img" aria-label="用量趋势"></svg>
+                <div id="trendLegend" class="trend-legend"></div>
+                <div id="chartTooltip" class="chart-tooltip" hidden></div>
             </article>
             <article class="panel chart-panel">
                 <div class="panel-head">
@@ -178,6 +180,6 @@
         </form>
     </aside>
 
-    <script src="/static/js/usage-dashboard.js?v=2026.07.14.9"></script>
+    <script src="/static/js/usage-dashboard.js?v=2026.07.14.10"></script>
 </body>
 </html>

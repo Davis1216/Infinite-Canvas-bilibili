@@ -487,7 +487,7 @@ function renderCanvasIcon(icon, size = 14) {
 }
 
 const SIZE_MAP = {
-    square: { '1k':'1024x1024', '2k':'2048x2048', '4k':'4096x4096' },
+    square: { '1k':'1024x1024', '2k':'2048x2048', '4k':'2880x2880' },
     portrait: { '1k':'1024x1536', '2k':'1360x2048', '4k':'2352x3520' },
     portrait43: { '1k':'1008x1344', '2k':'1536x2048', '4k':'2448x3264' },
     landscape43: { '1k':'1344x1008', '2k':'2048x1536', '4k':'3264x2448' },
@@ -672,12 +672,51 @@ function providerImageModels(providerId){
     const provider = apiProviders.find(p => p.id === providerId);
     return uniqueModels(provider?.image_models || []);
 }
+function imageModelResolutionTag(model){
+    const match = String(model || '').trim().match(/(?:^|[-_])(1k|2k|4k)$/i);
+    return match ? match[1].toLowerCase() : '';
+}
+function imageModelBaseName(model){
+    return String(model || '').trim().replace(/[-_](?:1k|2k|4k)$/i, '');
+}
+function imageModelForResolution(providerId, model, resolutionValue){
+    const res = String(resolutionValue || '').toLowerCase();
+    if(!model || !['1k','2k','4k'].includes(res)) return model;
+    const providerModels = providerImageModels(providerId);
+    const base = imageModelBaseName(resolveImageModel(model));
+    const candidates = res === '1k'
+        ? [base, `${base}-1k`, `${base}_1k`]
+        : [`${base}-${res}`, `${base}_${res}`];
+    const byLower = new Map((providerModels || []).map(item => [String(item).toLowerCase(), item]));
+    return candidates.map(item => byLower.get(item.toLowerCase())).find(Boolean) || model;
+}
+function syncImageNodeResolutionFromModel(node){
+    const tag = imageModelResolutionTag(resolveImageModel(node?.model));
+    if(!tag) return false;
+    node.resolution = tag;
+    if(!node.ratio) node.ratio = 'square';
+    node.customSize = '';
+    node.customWidth = '';
+    node.customHeight = '';
+    return true;
+}
+function syncImageNodeModelForResolution(node){
+    if(!node || node.type !== 'generator') return false;
+    const next = imageModelForResolution(node.apiProvider, node.model, node.resolution);
+    if(next && next !== node.model){
+        node.model = next;
+        return true;
+    }
+    return false;
+}
 function sanitizeImageNodeProviderModel(node){
     if(!node || node.type !== 'generator') return;
     node.apiProvider = resolveImageProviderId(node.apiProvider || '');
     const models = providerImageModels(node.apiProvider);
     if(!models.length) node.model = '';
-    else if(!models.includes(resolveImageModel(node.model))) node.model = models[0] || '';
+    else if(!models.includes(resolveImageModel(node.model))) node.model = imageModelForResolution(node.apiProvider, models[0] || '', node.resolution) || models[0] || '';
+    syncImageNodeResolutionFromModel(node);
+    syncImageNodeModelForResolution(node);
 }
 function videoApiProviders(){
     const providers = (apiProviders.length ? apiProviders : defaultApiProviders())
@@ -997,10 +1036,12 @@ function exceedsFourKStandard(width, height){
 }
 function normalizeApiNodeSizeChoice(node){
     if(!node) return;
+    const modelHasResolution = syncImageNodeResolutionFromModel(node);
     const allowAuto = imageModelAllowsAutoSize(node.model, node.apiProvider);
-    if(allowAuto && node._apiResolutionUserSet !== true && (!node.resolution || node.resolution === '1k')) node.resolution = 'auto';
+    if(allowAuto && !modelHasResolution && node._apiResolutionUserSet !== true && (!node.resolution || node.resolution === '1k')) node.resolution = 'auto';
     else if(!node.resolution) node.resolution = allowAuto ? 'auto' : '1k';
     if(!allowAuto && node.resolution === 'auto') node.resolution = '1k';
+    syncImageNodeModelForResolution(node);
 }
 async function generatorSizeForRun(gen, refs){
     if(gen.resolution === 'custom') return String(gen.customSize || '').trim() || '1024x1024';
@@ -8358,9 +8399,11 @@ function renderGeneratorBody(node){
         e.stopPropagation();
         node.apiProvider = e.target.value;
         const providerModels = providerImageModels(node.apiProvider);
-        if(!providerModels.includes(resolveImageModel(node.model))) node.model = providerModels[0] || '';
+        if(!providerModels.includes(resolveImageModel(node.model))) node.model = imageModelForResolution(node.apiProvider, providerModels[0] || '', node.resolution || '1k') || providerModels[0] || '';
         node._apiResolutionUserSet = false;
         node.resolution = defaultApiImageResolution(node.model, node.apiProvider);
+        syncImageNodeResolutionFromModel(node);
+        syncImageNodeModelForResolution(node);
         modelSelect.innerHTML = imageModelOptions(node.model, node.apiProvider);
         syncSizeControls();
         syncQualityControls();
@@ -8372,7 +8415,7 @@ function renderGeneratorBody(node){
         e.stopPropagation();
         node.model = e.target.value;
         node._apiResolutionUserSet = false;
-        if(node.resolution !== 'custom') node.resolution = defaultApiImageResolution(node.model, node.apiProvider);
+        if(node.resolution !== 'custom' && !syncImageNodeResolutionFromModel(node)) node.resolution = defaultApiImageResolution(node.model, node.apiProvider);
         syncSizeControls();
         syncQualityControls();
         scheduleSave();
@@ -8529,6 +8572,8 @@ function renderGeneratorBody(node){
             node.customWidth = '';
             node.customHeight = '';
         }
+        syncImageNodeModelForResolution(node);
+        modelSelect.innerHTML = imageModelOptions(node.model, node.apiProvider);
         normalizeApiNodeSizeChoice(node);
         syncSizeControls();
         scheduleSave();
@@ -10296,6 +10341,8 @@ async function runGenerator(genId, opts={}){
     const prompt = sources.map(s => s.prompt).filter(Boolean).join('\n\n');
     const refs = imageRefsOnly(orderReferenceSourcesForMain(sources).flatMap(s => s.refs || []));
     if(!prompt && !refs.length){ alert(tr('canvas.needPromptOrImage')); return; }
+    sanitizeImageNodeProviderModel(gen);
+    normalizeApiNodeSizeChoice(gen);
     const count = Math.max(1, Math.min(8, Number(gen.count || 1)));
     let out = outputForNode(gen, 460);
     const run = runSnapshot(gen, prompt || 'Edit the reference images.', refs);
@@ -10383,6 +10430,8 @@ async function runGeneratorLegacy(genId, opts={}){
     const prompt = sources.map(s => s.prompt).filter(Boolean).join('\n\n');
     const refs = imageRefsOnly(orderReferenceSourcesForMain(sources).flatMap(s => s.refs || []));
     if(!prompt && !refs.length){ alert(tr('canvas.needPromptOrImage')); return; }
+    sanitizeImageNodeProviderModel(gen);
+    normalizeApiNodeSizeChoice(gen);
     const count = Math.max(1, Math.min(8, Number(gen.count || 1)));
     let out = outputForNode(gen, 460);
     const pendingIds = Array.from({length:count}, () => uid('p'));
