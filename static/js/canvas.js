@@ -280,6 +280,7 @@ const outputCompareSlider = document.getElementById('outputCompareSlider');
 const outputResolution = document.getElementById('outputResolution');
 const outputDownloadBtn = document.getElementById('outputDownloadBtn');
 const outputDownloadAllBtn = document.getElementById('outputDownloadAllBtn');
+const outputInspirationBtn = document.getElementById('outputInspirationBtn');
 const outputLightboxVideo = document.getElementById('outputLightboxVideo');
 const outputPromptPanel = document.getElementById('outputPromptPanel');
 const outputPromptText = document.getElementById('outputPromptText');
@@ -12617,6 +12618,74 @@ function setupOutputPromptPanel(meta){
         rerunFromOutputMeta(currentOutputMeta);
     };
 }
+function canvasInspirationModel(meta){
+    const node = meta?.run?.node || {};
+    if(meta?.run?.nodeType === 'generator') return node.model || node.apiModel || '';
+    if(meta?.run?.nodeType === 'msgen') return node.msCustomModel || node.msgenModel || node.model || '';
+    if(meta?.run?.nodeType === 'video') return node.model || '';
+    if(meta?.run?.nodeType === 'comfy') return node.comfyWorkflow || node.workflow || 'ComfyUI';
+    if(meta?.run?.nodeType === 'rh') return node.runninghubTitle || node.workflowTitle || node.webappName || node.workflowId || node.webappId || 'RunningHub';
+    return node.model || meta?.model || '';
+}
+function canvasInspirationWorkflow(meta){
+    const node = meta?.run?.node || {};
+    if(meta?.run?.nodeType === 'comfy') return node.comfyWorkflow || node.workflow || 'ComfyUI';
+    if(meta?.run?.nodeType === 'rh') return node.runninghubTitle || node.workflowTitle || node.webappName || 'RunningHub';
+    return node.workflow || '';
+}
+function canvasInspirationPayload(url, meta={}){
+    const originalUrl = canvasOriginalMediaUrl(url);
+    const run = meta?.run || {};
+    const node = run.node || {};
+    const providerId = node.apiProvider || node.provider_id || meta.provider_id || '';
+    const provider = providerById(providerId) || {};
+    const size = node.size || node.previewSize || node.customSize || meta.size || '';
+    return {
+        category_id:'uncategorized',
+        title:[canvasInspirationModel(meta), run.prompt ? String(run.prompt).slice(0, 36) : '画布输出'].filter(Boolean).join(' · '),
+        image_url:originalUrl,
+        source_url:originalUrl,
+        source_type:'canvas',
+        prompt:run.prompt || meta.prompt || '',
+        provider_id:providerId,
+        provider_name:provider.name || providerId || runPlatformLabel(run),
+        model:canvasInspirationModel(meta),
+        ratio:node.ratio || node.aspectRatio || meta.ratio || '',
+        size,
+        workflow:canvasInspirationWorkflow(meta),
+        workflow_id:node.workflowId || node.webappId || node.comfyWorkflowId || '',
+        seed:String(meta.seed || node.seed || ''),
+        tags:['画布'].filter(Boolean),
+        notes:'',
+        params:{...meta, nodeType:run.nodeType || '', taskLabel:runTaskLabel(run), size},
+        references:run.refs || [],
+        source_canvas_id:String(canvas?.id || ''),
+        source_node_id:String(currentOutputLightboxOutId || node.id || ''),
+    };
+}
+async function addCurrentOutputToInspiration(event){
+    event?.stopPropagation?.();
+    const url = currentOutputLightboxUrl;
+    if(!url) return;
+    const btn = outputInspirationBtn;
+    if(btn) btn.disabled = true;
+    try {
+        const res = await fetch('/api/inspiration-space/items', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify(canvasInspirationPayload(url, currentOutputMeta || {}))
+        });
+        if(!res.ok) {
+            const detail = (await res.json()).detail || '保存失败';
+            throw new Error(detail === 'Not Found' ? '灵感空间接口未加载，请重启本地服务后再试。' : detail);
+        }
+        alert('已加入灵感空间');
+    } catch(err) {
+        alert(err.message || '保存失败');
+    } finally {
+        if(btn) btn.disabled = false;
+    }
+}
 promptTemplateSearch?.addEventListener('input', event => {
     promptTemplateQuery = event.target.value || '';
     renderPromptTemplateModal();
@@ -13189,6 +13258,10 @@ function openOutputLightbox(url, out){
     outputResolutionText('--', meta);
     currentOutputCompareUrl = outputCompareUrlFor(url, out);
     setOutputCompareMode(false);
+    if(outputInspirationBtn){
+        outputInspirationBtn.style.display = mediaKindForOutputItem(meta && Object.keys(meta).length ? {...meta, url} : url) === 'image' ? 'flex' : 'none';
+        outputInspirationBtn.onclick = addCurrentOutputToInspiration;
+    }
     const groupDownloadItems = out?.type === 'group' ? groupImageItems(out) : [];
     if(outputDownloadAllBtn){
         outputDownloadAllBtn.style.display = groupDownloadItems.length > 1 ? 'flex' : 'none';

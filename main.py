@@ -237,6 +237,8 @@ CANVAS_DIR = os.path.join(DATA_DIR, "canvases")
 MEDIA_PREVIEW_DIR = os.path.join(DATA_DIR, "media_previews")
 ASSET_LIBRARY_PATH = os.path.join(DATA_DIR, "asset_library.json")
 PROMPT_LIBRARY_PATH = os.path.join(DATA_DIR, "prompt_libraries.json")
+INSPIRATION_SPACE_PATH = os.path.join(DATA_DIR, "inspiration_space.json")
+INSPIRATION_MEDIA_DIR = os.path.join(ASSETS_DIR, "inspiration")
 API_PROVIDERS_FILE = os.path.join(DATA_DIR, "api_providers.json")
 USAGE_PRICING_FILE = os.path.join(DATA_DIR, "usage_pricing.json")
 RUNNINGHUB_WORKFLOW_STORE_FILE = os.path.join(DATA_DIR, "runninghub_workflows.json")
@@ -255,6 +257,7 @@ CONVERSATION_LOCK = Lock()
 CANVAS_LOCK = Lock()
 LOAD_LOCK = Lock()
 RUNNINGHUB_WORKFLOW_LOCK = Lock()
+INSPIRATION_SPACE_LOCK = Lock()
 NEXT_TASK_ID = 1
 UPDATE_LOCK = Lock()
 JIMENG_LOGIN_SESSION = {
@@ -2743,6 +2746,44 @@ class PromptLibraryBatchDeleteRequest(BaseModel):
 class PromptLibraryCategoryRequest(BaseModel):
     name: str = "新分组"
     library_id: str = ""
+
+class InspirationCategoryRequest(BaseModel):
+    name: str = "新分类"
+    description: str = ""
+    color: str = ""
+
+class InspirationItemRequest(BaseModel):
+    category_id: str = "uncategorized"
+    title: str = ""
+    image_url: str = ""
+    source_url: str = ""
+    source_type: str = ""
+    prompt: str = ""
+    negative_prompt: str = ""
+    provider_id: str = ""
+    provider_name: str = ""
+    model: str = ""
+    ratio: str = ""
+    size: str = ""
+    workflow: str = ""
+    workflow_id: str = ""
+    seed: str = ""
+    tags: List[str] = []
+    notes: str = ""
+    params: Dict[str, Any] = {}
+    references: List[Any] = []
+    source_record_id: str = ""
+    source_canvas_id: str = ""
+    source_node_id: str = ""
+
+class InspirationItemUpdateRequest(BaseModel):
+    category_id: str = ""
+    title: str = ""
+    prompt: str = ""
+    negative_prompt: str = ""
+    tags: List[str] = []
+    notes: str = ""
+    params: Dict[str, Any] = {}
 
 # --- 负载均衡 ---
 
@@ -6855,6 +6896,220 @@ def make_asset_library_item(src: str, name: str = "", subdir: str = "") -> Tuple
     }
     return dest_name, item
     return lib
+
+INSPIRATION_UNCATEGORIZED_ID = "uncategorized"
+INSPIRATION_MEDIA_EXTS = {
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif",
+    ".mp4", ".webm", ".mov", ".m4v", ".avi", ".mkv",
+}
+
+def default_inspiration_space():
+    return {
+        "active_category_id": "all",
+        "categories": [{
+            "id": INSPIRATION_UNCATEGORIZED_ID,
+            "name": "未分类",
+            "description": "尚未整理的灵感图像",
+            "color": "#64748b",
+            "sort": 0,
+            "system": True,
+            "created_at": now_ms(),
+            "updated_at": now_ms(),
+        }],
+        "items": [],
+        "updated_at": now_ms(),
+    }
+
+def _clean_inspiration_text(value, fallback="", limit=240):
+    text = re.sub(r"\s+", " ", str(value or "").strip())
+    text = text.strip(" \t\r\n")
+    if not text:
+        text = fallback
+    return text[:limit]
+
+def _clean_inspiration_color(value):
+    text = str(value or "").strip()
+    return text if re.match(r"^#[0-9a-fA-F]{6}$", text) else ""
+
+def normalize_inspiration_space(data):
+    if not isinstance(data, dict):
+        data = default_inspiration_space()
+    categories = data.get("categories") if isinstance(data.get("categories"), list) else []
+    seen = set()
+    clean_categories = []
+    if not any(isinstance(cat, dict) and cat.get("id") == INSPIRATION_UNCATEGORIZED_ID for cat in categories):
+        categories.insert(0, default_inspiration_space()["categories"][0])
+    for index, cat in enumerate(categories):
+        if not isinstance(cat, dict):
+            continue
+        cat_id = re.sub(r"[^A-Za-z0-9_-]+", "_", str(cat.get("id") or f"cat_{uuid.uuid4().hex[:10]}"))[:48]
+        if not cat_id or cat_id in seen:
+            cat_id = f"cat_{uuid.uuid4().hex[:10]}"
+        seen.add(cat_id)
+        is_system = cat_id == INSPIRATION_UNCATEGORIZED_ID or bool(cat.get("system"))
+        clean_categories.append({
+            "id": cat_id,
+            "name": _clean_inspiration_text(cat.get("name"), "未分类" if cat_id == INSPIRATION_UNCATEGORIZED_ID else "新分类", 60),
+            "description": _clean_inspiration_text(cat.get("description"), "", 160),
+            "color": _clean_inspiration_color(cat.get("color")) or ("#64748b" if cat_id == INSPIRATION_UNCATEGORIZED_ID else ""),
+            "sort": int(cat.get("sort") or index),
+            "system": is_system,
+            "created_at": int(cat.get("created_at") or now_ms()),
+            "updated_at": int(cat.get("updated_at") or now_ms()),
+        })
+    clean_categories.sort(key=lambda item: (item.get("sort", 0), item.get("created_at", 0)))
+    category_ids = {cat["id"] for cat in clean_categories}
+    items = []
+    for raw in data.get("items") if isinstance(data.get("items"), list) else []:
+        if not isinstance(raw, dict):
+            continue
+        item_id = re.sub(r"[^A-Za-z0-9_-]+", "_", str(raw.get("id") or f"insp_{uuid.uuid4().hex[:12]}"))[:56]
+        image_url = str(raw.get("image_url") or raw.get("url") or "").strip()
+        if not image_url:
+            continue
+        category_id = str(raw.get("category_id") or INSPIRATION_UNCATEGORIZED_ID)
+        if category_id not in category_ids:
+            category_id = INSPIRATION_UNCATEGORIZED_ID
+        tags = raw.get("tags") if isinstance(raw.get("tags"), list) else []
+        clean_tags = []
+        seen_tags = set()
+        for tag in tags:
+            text = _clean_inspiration_text(tag, "", 28)
+            if text and text not in seen_tags:
+                seen_tags.add(text)
+                clean_tags.append(text)
+        items.append({
+            "id": item_id,
+            "category_id": category_id,
+            "title": _clean_inspiration_text(raw.get("title"), "灵感图像", 100),
+            "image_url": image_url,
+            "source_url": str(raw.get("source_url") or "").strip(),
+            "source_type": _clean_inspiration_text(raw.get("source_type"), "", 40),
+            "prompt": str(raw.get("prompt") or "")[:20000],
+            "negative_prompt": str(raw.get("negative_prompt") or "")[:8000],
+            "provider_id": _clean_inspiration_text(raw.get("provider_id"), "", 80),
+            "provider_name": _clean_inspiration_text(raw.get("provider_name"), "", 100),
+            "model": _clean_inspiration_text(raw.get("model"), "", 140),
+            "ratio": _clean_inspiration_text(raw.get("ratio"), "", 40),
+            "size": _clean_inspiration_text(raw.get("size"), "", 40),
+            "workflow": _clean_inspiration_text(raw.get("workflow"), "", 160),
+            "workflow_id": _clean_inspiration_text(raw.get("workflow_id"), "", 120),
+            "seed": _clean_inspiration_text(raw.get("seed"), "", 80),
+            "tags": clean_tags[:40],
+            "notes": str(raw.get("notes") or "")[:4000],
+            "params": raw.get("params") if isinstance(raw.get("params"), dict) else {},
+            "references": raw.get("references") if isinstance(raw.get("references"), list) else [],
+            "source_record_id": _clean_inspiration_text(raw.get("source_record_id"), "", 80),
+            "source_canvas_id": _clean_inspiration_text(raw.get("source_canvas_id"), "", 80),
+            "source_node_id": _clean_inspiration_text(raw.get("source_node_id"), "", 80),
+            "created_at": int(raw.get("created_at") or now_ms()),
+            "updated_at": int(raw.get("updated_at") or now_ms()),
+        })
+    items.sort(key=lambda item: int(item.get("created_at") or 0), reverse=True)
+    data["categories"] = clean_categories
+    data["items"] = items
+    data["updated_at"] = int(data.get("updated_at") or now_ms())
+    return data
+
+def load_inspiration_space():
+    if not os.path.exists(INSPIRATION_SPACE_PATH):
+        data = default_inspiration_space()
+        save_inspiration_space(data)
+        return data
+    try:
+        with open(INSPIRATION_SPACE_PATH, "r", encoding="utf-8") as f:
+            return normalize_inspiration_space(json.load(f))
+    except Exception:
+        return default_inspiration_space()
+
+def save_inspiration_space(data):
+    data = normalize_inspiration_space(data)
+    data["updated_at"] = now_ms()
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = f"{INSPIRATION_SPACE_PATH}.{uuid.uuid4().hex}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, INSPIRATION_SPACE_PATH)
+    return data
+
+def inspiration_media_kind(path: str, content_type: str = ""):
+    ext = os.path.splitext(path or "")[1].lower()
+    ct = (content_type or "").lower()
+    if ext in {".mp4", ".webm", ".mov", ".m4v", ".avi", ".mkv"} or ct.startswith("video/"):
+        return "video"
+    return "image"
+
+def normalize_inspiration_source_url(source_url: str):
+    src = str(source_url or "").strip()
+    if not src:
+        return ""
+    try:
+        parsed = urllib.parse.urlparse(src)
+        path = parsed.path or ""
+        if path in ("/api/media-preview", "/api/download-output"):
+            query = urllib.parse.parse_qs(parsed.query or "")
+            original = (query.get("url") or [""])[0]
+            if original:
+                return urllib.parse.unquote(original)
+    except Exception:
+        pass
+    return src
+
+def copy_inspiration_media(source_url: str, title: str = ""):
+    src = normalize_inspiration_source_url(source_url)
+    if not src:
+        raise HTTPException(status_code=400, detail="图片地址为空")
+    os.makedirs(INSPIRATION_MEDIA_DIR, exist_ok=True)
+    raw = None
+    content_type = ""
+    src_path = None
+    if src.startswith("data:"):
+        header, _, b64 = src.partition(",")
+        content_type = header[5:].split(";", 1)[0] if header.startswith("data:") else ""
+        try:
+            raw = base64.b64decode(b64)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="无法解析图片 data URL") from exc
+    else:
+        src_path = output_file_from_url(src)
+        if src_path and os.path.isfile(src_path):
+            content_type = mimetypes.guess_type(src_path)[0] or ""
+        elif src.startswith(("http://", "https://")):
+            fetched = fetch_remote_media_bytes(src)
+            if not fetched:
+                raise HTTPException(status_code=400, detail="无法下载远程图片")
+            raw, content_type = fetched
+        else:
+            raise HTTPException(status_code=400, detail="只支持本地 /assets、/output、data URL 或 http(s) 图片")
+    base_ext = os.path.splitext(urllib.parse.urlsplit(src).path)[1].lower()
+    guessed_ext = mimetypes.guess_extension(content_type or "") or ""
+    ext = base_ext if base_ext in INSPIRATION_MEDIA_EXTS else guessed_ext.lower()
+    if ext not in INSPIRATION_MEDIA_EXTS:
+        ext = ".png"
+    safe_title = sanitize_export_filename(title or "inspiration", "inspiration").rsplit(".", 1)[0][:48] or "inspiration"
+    filename = f"insp_{uuid.uuid4().hex[:14]}_{safe_title}{ext}"
+    dest = os.path.join(INSPIRATION_MEDIA_DIR, filename)
+    if raw is not None:
+        with open(dest, "wb") as f:
+            f.write(raw)
+    else:
+        shutil.copy2(src_path, dest)
+    rel = urllib.parse.quote(filename, safe="")
+    return f"/assets/inspiration/{rel}", inspiration_media_kind(dest, content_type)
+
+def remove_inspiration_media(item):
+    try:
+        path = output_file_from_url(item.get("image_url") if isinstance(item, dict) else "")
+        if path and os.path.abspath(path).startswith(os.path.abspath(INSPIRATION_MEDIA_DIR) + os.sep) and os.path.isfile(path):
+            os.remove(path)
+    except Exception as exc:
+        print(f"删除灵感空间文件失败: {exc}")
+
+def inspiration_category_by_id(data, category_id):
+    return next((cat for cat in data.get("categories", []) if cat.get("id") == category_id), None)
+
+def inspiration_item_by_id(data, item_id):
+    return next((item for item in data.get("items", []) if item.get("id") == item_id), None)
 
 ASSET_CLASSIFICATION_PROMPT = """请识别这张图片，输出严格 JSON，不要 Markdown，不要解释。
 目标是给素材库做非常全面的筛选分类。所有字段都用中文短标签数组，尽量具体但不要虚构。
@@ -14924,6 +15179,140 @@ async def export_smart_canvas_group(payload: SmartCanvasGroupExportRequest):
 @app.get("/api/asset-library")
 async def get_asset_library():
     return {"library": load_asset_library()}
+
+@app.get("/api/inspiration-space")
+async def get_inspiration_space():
+    with INSPIRATION_SPACE_LOCK:
+        return {"space": load_inspiration_space()}
+
+@app.post("/api/inspiration-space/categories")
+async def create_inspiration_category(payload: InspirationCategoryRequest):
+    name = _clean_inspiration_text(payload.name, "新分类", 60)
+    with INSPIRATION_SPACE_LOCK:
+        data = load_inspiration_space()
+        category = {
+            "id": f"cat_{uuid.uuid4().hex[:12]}",
+            "name": name,
+            "description": _clean_inspiration_text(payload.description, "", 160),
+            "color": _clean_inspiration_color(payload.color),
+            "sort": len(data.get("categories", [])),
+            "system": False,
+            "created_at": now_ms(),
+            "updated_at": now_ms(),
+        }
+        data.setdefault("categories", []).append(category)
+        data = save_inspiration_space(data)
+        return {"space": data, "category": category}
+
+@app.patch("/api/inspiration-space/categories/{category_id}")
+async def update_inspiration_category(category_id: str, payload: InspirationCategoryRequest):
+    with INSPIRATION_SPACE_LOCK:
+        data = load_inspiration_space()
+        category = inspiration_category_by_id(data, category_id)
+        if not category:
+            raise HTTPException(status_code=404, detail="分类不存在")
+        category["name"] = _clean_inspiration_text(payload.name, category.get("name") or ("未分类" if category_id == INSPIRATION_UNCATEGORIZED_ID else "新分类"), 60)
+        category["description"] = _clean_inspiration_text(payload.description, category.get("description") or "", 160)
+        category["color"] = _clean_inspiration_color(payload.color) or category.get("color") or ("#64748b" if category_id == INSPIRATION_UNCATEGORIZED_ID else "")
+        category["updated_at"] = now_ms()
+        data = save_inspiration_space(data)
+        return {"space": data, "category": inspiration_category_by_id(data, category_id)}
+
+@app.delete("/api/inspiration-space/categories/{category_id}")
+async def delete_inspiration_category(category_id: str):
+    if category_id == INSPIRATION_UNCATEGORIZED_ID:
+        raise HTTPException(status_code=400, detail="未分类不能删除")
+    with INSPIRATION_SPACE_LOCK:
+        data = load_inspiration_space()
+        before = len(data.get("categories", []))
+        data["categories"] = [cat for cat in data.get("categories", []) if cat.get("id") != category_id]
+        if len(data["categories"]) == before:
+            raise HTTPException(status_code=404, detail="分类不存在")
+        for item in data.get("items", []):
+            if item.get("category_id") == category_id:
+                item["category_id"] = INSPIRATION_UNCATEGORIZED_ID
+                item["updated_at"] = now_ms()
+        data = save_inspiration_space(data)
+        return {"space": data}
+
+@app.post("/api/inspiration-space/items")
+async def add_inspiration_item(payload: InspirationItemRequest):
+    source_url = payload.image_url or payload.source_url
+    with INSPIRATION_SPACE_LOCK:
+        data = load_inspiration_space()
+        category_id = payload.category_id if inspiration_category_by_id(data, payload.category_id) else INSPIRATION_UNCATEGORIZED_ID
+        title = _clean_inspiration_text(payload.title, os.path.splitext(os.path.basename(urllib.parse.urlsplit(source_url).path))[0] or "灵感图像", 100)
+        copied_url, media_kind = copy_inspiration_media(source_url, title)
+        item = {
+            "id": f"insp_{uuid.uuid4().hex[:12]}",
+            "category_id": category_id,
+            "title": title,
+            "image_url": copied_url,
+            "source_url": str(payload.source_url or payload.image_url or "").strip(),
+            "source_type": _clean_inspiration_text(payload.source_type, "", 40),
+            "prompt": str(payload.prompt or "")[:20000],
+            "negative_prompt": str(payload.negative_prompt or "")[:8000],
+            "provider_id": _clean_inspiration_text(payload.provider_id, "", 80),
+            "provider_name": _clean_inspiration_text(payload.provider_name, "", 100),
+            "model": _clean_inspiration_text(payload.model, "", 140),
+            "ratio": _clean_inspiration_text(payload.ratio, "", 40),
+            "size": _clean_inspiration_text(payload.size, "", 40),
+            "workflow": _clean_inspiration_text(payload.workflow, "", 160),
+            "workflow_id": _clean_inspiration_text(payload.workflow_id, "", 120),
+            "seed": _clean_inspiration_text(payload.seed, "", 80),
+            "tags": [_clean_inspiration_text(tag, "", 28) for tag in (payload.tags or []) if _clean_inspiration_text(tag, "", 28)][:40],
+            "notes": str(payload.notes or "")[:4000],
+            "params": payload.params if isinstance(payload.params, dict) else {},
+            "references": payload.references if isinstance(payload.references, list) else [],
+            "source_record_id": _clean_inspiration_text(payload.source_record_id, "", 80),
+            "source_canvas_id": _clean_inspiration_text(payload.source_canvas_id, "", 80),
+            "source_node_id": _clean_inspiration_text(payload.source_node_id, "", 80),
+            "media_kind": media_kind,
+            "created_at": now_ms(),
+            "updated_at": now_ms(),
+        }
+        data.setdefault("items", []).insert(0, item)
+        data = save_inspiration_space(data)
+        return {"space": data, "item": item}
+
+@app.patch("/api/inspiration-space/items/{item_id}")
+async def update_inspiration_item(item_id: str, payload: InspirationItemUpdateRequest):
+    with INSPIRATION_SPACE_LOCK:
+        data = load_inspiration_space()
+        item = inspiration_item_by_id(data, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="条目不存在")
+        if payload.category_id:
+            item["category_id"] = payload.category_id if inspiration_category_by_id(data, payload.category_id) else INSPIRATION_UNCATEGORIZED_ID
+        if payload.title:
+            item["title"] = _clean_inspiration_text(payload.title, item.get("title") or "灵感图像", 100)
+        item["prompt"] = str(payload.prompt if payload.prompt is not None else item.get("prompt") or "")[:20000]
+        item["negative_prompt"] = str(payload.negative_prompt if payload.negative_prompt is not None else item.get("negative_prompt") or "")[:8000]
+        item["tags"] = [_clean_inspiration_text(tag, "", 28) for tag in (payload.tags or []) if _clean_inspiration_text(tag, "", 28)][:40]
+        item["notes"] = str(payload.notes if payload.notes is not None else item.get("notes") or "")[:4000]
+        if isinstance(payload.params, dict) and payload.params:
+            item["params"] = payload.params
+        item["updated_at"] = now_ms()
+        data = save_inspiration_space(data)
+        return {"space": data, "item": inspiration_item_by_id(data, item_id)}
+
+@app.delete("/api/inspiration-space/items/{item_id}")
+async def delete_inspiration_item(item_id: str):
+    with INSPIRATION_SPACE_LOCK:
+        data = load_inspiration_space()
+        removed = None
+        kept = []
+        for item in data.get("items", []):
+            if item.get("id") == item_id:
+                removed = item
+            else:
+                kept.append(item)
+        if not removed:
+            raise HTTPException(status_code=404, detail="条目不存在")
+        data["items"] = kept
+        remove_inspiration_media(removed)
+        data = save_inspiration_space(data)
+        return {"space": data, "removed": 1}
 
 @app.get("/api/prompt-libraries")
 async def get_prompt_libraries():

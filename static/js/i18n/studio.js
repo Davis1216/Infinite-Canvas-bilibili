@@ -99,6 +99,7 @@
         "online.rhWorkflow": { zh: "工作流", en: "Workflow" },
         "online.rhApp": { zh: "应用", en: "App" },
         "online.rhNoEntries": { zh: "未配置工作流 / 应用", en: "No workflows / apps configured" },
+        "nav.inspirationSpace": { zh: "灵感空间", en: "Inspiration" },
         "chat.title": { zh: "GPT 对话", en: "GPT Chat" },
         "chat.newConversation": { zh: "新对话", en: "New Chat" },
         "chat.new": { zh: "新建", en: "NEW" },

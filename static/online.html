@@ -19,7 +19,7 @@
     <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
-    <script src="/static/js/i18n.js?v=2026.07.4.2.1784008200"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1784029505"></script>
     <script src="/static/js/image-preview.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/history-bulk-manager.js?v=2026.07.4.2.1783154122"></script>
     <style>
@@ -252,7 +252,46 @@
                     <span class="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-2">Prompt</span>
                     <p id="lightboxPrompt" class="text-gray-700 text-sm leading-relaxed max-h-32 overflow-y-auto pr-2"></p>
                 </div>
-                <button id="sameStyleBtn" onclick="applySameStyle()" class="bg-black text-white px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><i data-lucide="copy" class="w-4 h-4"></i><span data-i18n="online.reuse">Reuse</span></button>
+                <div class="flex items-center gap-3 flex-wrap justify-end">
+                    <button id="addInspirationBtn" onclick="openInspirationPicker('online')" class="bg-white text-black border border-gray-200 px-6 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:border-black"><i data-lucide="sparkles" class="w-4 h-4"></i><span>加入灵感空间</span></button>
+                    <button id="sameStyleBtn" onclick="applySameStyle()" class="bg-black text-white px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><i data-lucide="copy" class="w-4 h-4"></i><span data-i18n="online.reuse">Reuse</span></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="inspirationPickerModal" class="hidden fixed inset-0 z-[70] prompt-modal items-center justify-center p-4" onclick="handleInspirationOutside(event)">
+        <div class="prompt-panel max-w-[560px]" onclick="event.stopPropagation()">
+            <header class="prompt-panel-head">
+                <div>
+                    <h3>加入灵感空间</h3>
+                    <p>保存图片副本，并记录当前提示词与模型参数</p>
+                </div>
+                <button class="w-10 h-10 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-500 hover:text-black hover:border-black" type="button" onclick="closeInspirationPicker()" title="关闭">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </header>
+            <div class="p-6 grid gap-4">
+                <label class="grid gap-2 text-[11px] font-black text-slate-500">
+                    <span>分类</span>
+                    <select id="inspirationCategorySelect" class="h-11 rounded-2xl border border-slate-200 px-4 bg-white text-slate-900 font-bold"></select>
+                </label>
+                <label class="grid gap-2 text-[11px] font-black text-slate-500">
+                    <span>标题</span>
+                    <input id="inspirationTitleInput" class="h-11 rounded-2xl border border-slate-200 px-4 bg-white text-slate-900 font-bold" type="text" maxlength="100" placeholder="灵感图像">
+                </label>
+                <label class="grid gap-2 text-[11px] font-black text-slate-500">
+                    <span>标签</span>
+                    <input id="inspirationTagsInput" class="h-11 rounded-2xl border border-slate-200 px-4 bg-white text-slate-900 font-bold" type="text" placeholder="用逗号分隔">
+                </label>
+                <label class="grid gap-2 text-[11px] font-black text-slate-500">
+                    <span>备注</span>
+                    <textarea id="inspirationNotesInput" class="min-h-[92px] rounded-2xl border border-slate-200 p-4 bg-white text-slate-900 font-medium resize-y" placeholder="记录这个画面的用途、优点或修改方向"></textarea>
+                </label>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" onclick="closeInspirationPicker()" class="px-5 h-11 rounded-2xl border border-slate-200 text-[11px] font-black text-slate-500">取消</button>
+                    <button id="saveInspirationBtn" type="button" onclick="saveOnlineInspiration()" class="px-6 h-11 rounded-2xl bg-black text-white text-[11px] font-black flex items-center gap-2"><i data-lucide="save" class="w-4 h-4"></i><span>保存</span></button>
+                </div>
             </div>
         </div>
     </div>
@@ -986,6 +1025,81 @@
             document.body.style.overflow='auto';
         }
         function handleOutsideClick(e){ if(e.target.id === 'lightbox') closeLightbox(); }
+        function handleInspirationOutside(e){ if(e.target.id === 'inspirationPickerModal') closeInspirationPicker(); }
+        function inspirationTags(){
+            return (document.getElementById('inspirationTagsInput')?.value || '').split(/[,，、\n]/).map(s => s.trim()).filter(Boolean);
+        }
+        function defaultInspirationTitle(data){
+            const model = data?.model || data?.params?.model || '';
+            const prompt = String(data?.prompt || '').trim();
+            return (model ? `${model} · ` : '') + (prompt ? prompt.slice(0, 42) : '在线生图');
+        }
+        async function openInspirationPicker(){
+            if(!currentLightboxData?.images?.[0]) return;
+            const modal = document.getElementById('inspirationPickerModal');
+            const select = document.getElementById('inspirationCategorySelect');
+            const title = document.getElementById('inspirationTitleInput');
+            select.innerHTML = '<option value="uncategorized">未分类</option>';
+            try {
+                const data = await fetch('/api/inspiration-space').then(r => r.json());
+                const cats = data.space?.categories || [];
+                select.innerHTML = cats.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('') || '<option value="uncategorized">未分类</option>';
+            } catch(err) {
+                console.warn('load inspiration categories failed', err);
+            }
+            title.value = defaultInspirationTitle(currentLightboxData);
+            document.getElementById('inspirationTagsInput').value = '';
+            document.getElementById('inspirationNotesInput').value = '';
+            modal.classList.replace('hidden', 'flex');
+            lucide.createIcons();
+        }
+        function closeInspirationPicker(){
+            document.getElementById('inspirationPickerModal')?.classList.replace('flex', 'hidden');
+        }
+        async function saveOnlineInspiration(){
+            const data = currentLightboxData;
+            if(!data?.images?.[0]) return;
+            const btn = document.getElementById('saveInspirationBtn');
+            btn.disabled = true;
+            const params = data.params || {};
+            const payload = {
+                category_id:document.getElementById('inspirationCategorySelect').value || 'uncategorized',
+                title:document.getElementById('inspirationTitleInput').value || defaultInspirationTitle(data),
+                image_url:data.images[0],
+                source_url:data.images[0],
+                source_type:'online',
+                prompt:data.prompt || '',
+                provider_id:data.provider_id || params.provider_id || '',
+                provider_name:data.provider_name || params.provider_name || '',
+                model:data.model || params.model || '',
+                ratio:params.ratio || params.aspect_ratio || '',
+                size:params.size || '',
+                seed:String(params.seed || ''),
+                tags:inspirationTags(),
+                notes:document.getElementById('inspirationNotesInput').value || '',
+                params:{
+                    ...params,
+                    quality:data.quality || params.quality || '',
+                    temperature:data.temperature ?? params.temperature,
+                    n:Array.isArray(data.images) ? data.images.length : params.n,
+                },
+                references:params.reference_images || [],
+                source_record_id:String(data.timestamp || data.id || ''),
+            };
+            try {
+                const res = await fetch('/api/inspiration-space/items', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+                if(!res.ok) {
+                    const detail = (await res.json()).detail || '保存失败';
+                    throw new Error(detail === 'Not Found' ? '灵感空间接口未加载，请重启本地服务后再试。' : detail);
+                }
+                closeInspirationPicker();
+                alert('已加入灵感空间');
+            } catch(err) {
+                alert(err.message || '保存失败');
+            } finally {
+                btn.disabled = false;
+            }
+        }
         async function downloadLightboxImage(e){
             e.stopPropagation();
             const url = currentLightboxData?.images?.[0];

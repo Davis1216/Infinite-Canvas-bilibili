@@ -6622,6 +6622,68 @@ function downloadPreviewImage(){
     link.click();
     link.remove();
 }
+function smartInspirationProvider(node={}, image={}){
+    const providerId = image.provider_id || image.providerId || node.provider_id || node.providerId || node.apiProvider || node.settings?.provider_id || settings.provider_id || '';
+    const provider = providerId ? (apiProviderById(providerId) || {}) : {};
+    return {id:providerId, name:provider.name || providerId || ''};
+}
+function smartInspirationModel(node={}, image={}){
+    return image.model || image.model_id || node.model || node.videoModel || node.msCustomModel || node.msgenModel || node.settings?.model || settings.model || settings.videoModel || '';
+}
+function smartInspirationPrompt(node={}, image={}){
+    return image.prompt || image.positive || node.prompt || node.inputPrompt || node.text || node.settings?.prompt || '';
+}
+function smartInspirationWorkflow(node={}, image={}){
+    return image.workflow || image.workflow_name || node.workflow || node.comfyWorkflow || node.runninghubTitle || node.workflowTitle || '';
+}
+function smartInspirationSize(node={}, image={}){
+    return image.size || image.resolution || node.size || node.resolution || node.settings?.size || node.settings?.resolution || settings.size || settings.resolution || '';
+}
+async function addSmartPreviewToInspiration(){
+    const node = nodes.find(n => n.id === previewNavState.nodeId);
+    const rawImage = node?.images?.[previewNavState.index];
+    const image = imageForDisplay(rawImage);
+    if(!image?.url) return;
+    const originalUrl = smartOriginalMediaUrl(image.url);
+    const btn = document.getElementById('previewInspirationBtn');
+    if(btn) btn.disabled = true;
+    const provider = smartInspirationProvider(node, image);
+    const prompt = smartInspirationPrompt(node, image);
+    const payload = {
+        category_id:'uncategorized',
+        title:[smartInspirationModel(node, image), prompt ? String(prompt).slice(0, 36) : '画布图像'].filter(Boolean).join(' · '),
+        image_url:originalUrl,
+        source_url:originalUrl,
+        source_type:'smart_canvas',
+        prompt,
+        provider_id:provider.id,
+        provider_name:provider.name,
+        model:smartInspirationModel(node, image),
+        ratio:image.ratio || image.aspect_ratio || node.ratio || node.aspectRatio || settings.ratio || '',
+        size:smartInspirationSize(node, image),
+        workflow:smartInspirationWorkflow(node, image),
+        workflow_id:image.workflow_id || node.workflowId || node.webappId || node.comfyWorkflowId || '',
+        seed:String(image.seed || node.seed || ''),
+        tags:['无限画布'],
+        notes:'',
+        params:{...(rawImage || {}), nodeType:node?.type || '', engine:node?.engine || settings.engine || ''},
+        references:[],
+        source_canvas_id:String(canvas?.id || ''),
+        source_node_id:String(node?.id || ''),
+    };
+    try {
+        const res = await fetch('/api/inspiration-space/items', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+        if(!res.ok) {
+            const detail = (await res.json()).detail || '保存失败';
+            throw new Error(detail === 'Not Found' ? '灵感空间接口未加载，请重启本地服务后再试。' : detail);
+        }
+        toast('已加入灵感空间');
+    } catch(err) {
+        alert(err.message || '保存失败');
+    } finally {
+        if(btn) btn.disabled = false;
+    }
+}
 function downloadPreviewFile(item){
     if(!item?.url) return;
     const name = downloadNameForMediaItem(item, 'output');

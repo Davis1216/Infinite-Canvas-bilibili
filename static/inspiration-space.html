@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/images/logo.png" type="image/png">
+    <title>灵感空间</title>
+    <script>
+        (function(){
+            try {
+                var theme = localStorage.getItem('studio_theme') || localStorage.getItem('canvas_theme') || 'light';
+                if(theme === 'dark') {
+                    document.documentElement.classList.add('studio-theme-dark');
+                    document.documentElement.classList.add('theme-dark');
+                }
+            } catch(e) {}
+        })();
+    </script>
+    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
+    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
+    <link rel="stylesheet" href="/static/css/inspiration-space.css?v=2026.07.4.2.1784037001">
+</head>
+<body>
+    <main class="insp-shell">
+        <header class="insp-topbar">
+            <div>
+                <p class="insp-kicker">INSPIRATION SPACE</p>
+                <h1>灵感空间</h1>
+            </div>
+            <div class="insp-actions">
+                <div class="search-box">
+                    <i data-lucide="search"></i>
+                    <input id="searchInput" type="search" placeholder="搜索提示词、模型、标签">
+                </div>
+                <select id="sortSelect" class="control-select">
+                    <option value="created_desc">最近加入</option>
+                    <option value="updated_desc">最近编辑</option>
+                    <option value="model">模型</option>
+                    <option value="category">分类</option>
+                </select>
+                <div class="segmented">
+                    <button id="gridViewBtn" class="active" type="button" title="网格"><i data-lucide="grid-3x3"></i></button>
+                    <button id="masonryViewBtn" type="button" title="瀑布流"><i data-lucide="layout-dashboard"></i></button>
+                </div>
+                <button id="addCategoryBtn" class="primary-btn" type="button"><i data-lucide="folder-plus"></i><span>新建分类</span></button>
+            </div>
+        </header>
+
+        <section class="insp-layout">
+            <aside class="category-panel">
+                <div class="panel-title">
+                    <span>分类</span>
+                    <small id="totalCount">0 张</small>
+                </div>
+                <div id="categoryList" class="category-list"></div>
+            </aside>
+
+            <section class="gallery-panel">
+                <div id="emptyState" class="empty-state" hidden>
+                    <i data-lucide="sparkles"></i>
+                    <h2>暂无灵感图像</h2>
+                    <p>从在线生图或无限画布的图片预览里点击「加入灵感空间」，这里会保存独立副本和生成参数。</p>
+                </div>
+                <div id="galleryGrid" class="gallery-grid"></div>
+            </section>
+        </section>
+    </main>
+
+    <div id="detailDrawer" class="drawer" hidden>
+        <div class="drawer-backdrop" data-close-detail></div>
+        <aside class="drawer-panel">
+            <header class="drawer-head">
+                <div>
+                    <p>DETAIL</p>
+                    <h2 id="detailTitle">灵感图像</h2>
+                </div>
+                <button class="icon-btn" type="button" data-close-detail><i data-lucide="x"></i></button>
+            </header>
+            <div class="drawer-body">
+                <img id="detailImage" class="detail-image" alt="inspiration">
+                <div class="detail-actions">
+                    <button id="copyPromptBtn" class="ghost-btn" type="button"><i data-lucide="copy"></i><span>复制提示词</span></button>
+                    <button id="editItemBtn" class="ghost-btn" type="button"><i data-lucide="pencil"></i><span>编辑</span></button>
+                    <button id="deleteItemBtn" class="danger-btn" type="button"><i data-lucide="trash-2"></i><span>删除</span></button>
+                </div>
+                <section class="detail-section">
+                    <h3>提示词</h3>
+                    <p id="detailPrompt" class="detail-prompt">未记录</p>
+                </section>
+                <section class="detail-section">
+                    <h3>参数</h3>
+                    <div id="detailMeta" class="meta-grid"></div>
+                </section>
+                <section class="detail-section">
+                    <h3>备注</h3>
+                    <p id="detailNotes" class="detail-notes">未记录</p>
+                </section>
+            </div>
+        </aside>
+    </div>
+
+    <div id="editModal" class="modal" hidden>
+        <div class="modal-backdrop" data-close-edit></div>
+        <section class="modal-panel">
+            <header class="modal-head">
+                <div>
+                    <p id="editKicker">CATEGORY</p>
+                    <h2 id="editTitle">新建分类</h2>
+                </div>
+                <button class="icon-btn" type="button" data-close-edit><i data-lucide="x"></i></button>
+            </header>
+            <form id="editForm" class="edit-form">
+                <input id="editingId" type="hidden">
+                <input id="editingKind" type="hidden">
+                <label id="titleField">
+                    <span>名称</span>
+                    <input id="titleInput" type="text" maxlength="100">
+                </label>
+                <label id="categoryField">
+                    <span>分类</span>
+                    <select id="categorySelect"></select>
+                </label>
+                <label id="colorField">
+                    <span>颜色</span>
+                    <input id="colorInput" type="color" value="#2563eb">
+                </label>
+                <label id="tagsField">
+                    <span>标签</span>
+                    <input id="tagsInput" type="text" placeholder="用逗号分隔">
+                </label>
+                <label id="promptField">
+                    <span>提示词</span>
+                    <textarea id="promptInput" rows="6"></textarea>
+                </label>
+                <label>
+                    <span>备注 / 描述</span>
+                    <textarea id="notesInput" rows="4"></textarea>
+                </label>
+                <footer class="modal-actions">
+                    <button id="deleteCategoryBtn" class="danger-btn" type="button" hidden><i data-lucide="trash-2"></i><span>删除分类</span></button>
+                    <button class="ghost-btn" type="button" data-close-edit>取消</button>
+                    <button class="primary-btn" type="submit"><i data-lucide="save"></i><span>保存</span></button>
+                </footer>
+            </form>
+        </section>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="/static/js/inspiration-space.js?v=2026.07.4.2.1784036994"></script>
+</body>
+</html>

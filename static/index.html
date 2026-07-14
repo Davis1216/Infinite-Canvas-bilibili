@@ -30,7 +30,7 @@
     </script>
     <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
-    <script src="/static/js/i18n.js?v=2026.07.4.2.1784008200"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1784029505"></script>
     <style>
         @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783154122');
 
@@ -1434,6 +1434,14 @@
                     </svg>
                     <span class="nav-text" data-i18n="nav.usageDashboard">仪表盘</span>
                 </div>
+                <div class="nav-item" onclick="switchUI(this, 'inspiration-space')">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9.9 4.2 8.7 7.1 5.8 8.3l2.9 1.2 1.2 2.9 1.2-2.9L14 8.3l-2.9-1.2-1.2-2.9z"></path>
+                        <path d="M18.4 11.6 17.7 13.3 16 14l1.7.7.7 1.7.7-1.7 1.7-.7-1.7-.7-.7-1.7z"></path>
+                        <path d="M12 15l-1 2.4L8.6 18.4l2.4 1 1 2.4 1-2.4 2.4-1-2.4-1L12 15z"></path>
+                    </svg>
+                    <span class="nav-text" data-i18n="nav.inspirationSpace">灵感空间</span>
+                </div>
                 <div class="nav-item" onclick="switchUI(this, 'canvas')">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="3" y="3" width="7" height="7"></rect>
@@ -1548,17 +1556,18 @@
         </script>
 
         <main class="stage">
-            <iframe id="frame-zimage" data-src="/static/zimage.html?v=2026.07.4.2.1784013409" class="active" scrolling="yes"></iframe>
-            <iframe id="frame-enhance" data-src="/static/enhance.html?v=2026.07.4.2.1784013409" scrolling="yes"></iframe>
-            <iframe id="frame-klein" data-src="/static/klein.html?v=2026.07.4.2.1784013409" scrolling="yes"></iframe>
-            <iframe id="frame-angle" data-src="/static/angle.html?v=2026.07.4.2.1784013409" scrolling="yes"></iframe>
-            <iframe id="frame-online" data-src="/static/online.html?v=2026.07.14.size-fix" scrolling="yes"></iframe>
-            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.07.4.2.1784013409" scrolling="yes"></iframe>
-            <iframe id="frame-usage-dashboard" data-src="/static/usage-dashboard.html?v=2026.07.14.10" scrolling="yes"></iframe>
+            <iframe id="frame-zimage" data-src="/static/zimage.html?v=2026.07.4.2.1784036813" class="active" scrolling="yes"></iframe>
+            <iframe id="frame-enhance" data-src="/static/enhance.html?v=2026.07.4.2.1784036813" scrolling="yes"></iframe>
+            <iframe id="frame-klein" data-src="/static/klein.html?v=2026.07.4.2.1784036813" scrolling="yes"></iframe>
+            <iframe id="frame-angle" data-src="/static/angle.html?v=2026.07.4.2.1784036813" scrolling="yes"></iframe>
+            <iframe id="frame-online" data-src="/static/online.html?v=2026.07.4.2.1784036813" scrolling="yes"></iframe>
+            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.07.4.2.1784036813" scrolling="yes"></iframe>
+            <iframe id="frame-usage-dashboard" data-src="/static/usage-dashboard.html?v=2026.07.4.2.1784036813" scrolling="yes"></iframe>
+            <iframe id="frame-inspiration-space" data-src="/static/inspiration-space.html?v=2026.07.4.2.1784037037" scrolling="yes"></iframe>
             <iframe id="frame-asset-manager" data-src="/static/asset-manager.html?v=2026.07.4.2.1783154233" scrolling="yes"></iframe>
-            <iframe id="frame-api-settings" data-src="/static/api-settings.html?v=2026.07.4.2.1784013409" scrolling="yes"></iframe>
-            <iframe id="frame-comfyui-settings" data-src="/static/comfyui-settings.html?v=2026.07.4.2.1784013409" scrolling="yes"></iframe>
-            <iframe id="frame-canvas" data-src="/static/canvas-list.html?v=2026.07.4.2.1784013409" scrolling="yes"></iframe>
+            <iframe id="frame-api-settings" data-src="/static/api-settings.html?v=2026.07.4.2.1784036813" scrolling="yes"></iframe>
+            <iframe id="frame-comfyui-settings" data-src="/static/comfyui-settings.html?v=2026.07.4.2.1784036813" scrolling="yes"></iframe>
+            <iframe id="frame-canvas" data-src="/static/canvas-list.html?v=2026.07.4.2.1784036813" scrolling="yes"></iframe>
 
         </main>
     </div>
@@ -1667,7 +1676,7 @@
         const SIDEBAR_SETTINGS_COLLAPSED_KEY = 'studio_sidebar_settings_collapsed';
         const SIDEBAR_PINNED_KEY = 'studio_sidebar_pinned';
         const DEFAULT_PAGE_ID = 'online';
-        const PAGE_IDS = ['zimage','enhance','klein','angle','online','gpt-chat','usage-dashboard','canvas','asset-manager','api-settings','comfyui-settings'];
+        const PAGE_IDS = ['zimage','enhance','klein','angle','online','gpt-chat','usage-dashboard','inspiration-space','canvas','asset-manager','api-settings','comfyui-settings'];
         const LOCAL_PAGE_IDS = ['zimage','enhance','klein','angle'];
         const PROJECT_URL = 'https://github.com/hero8152/Infinite-Canvas';
         let appInfo = { version:'', repo_url:PROJECT_URL, version_url:'https://raw.githubusercontent.com/hero8152/Infinite-Canvas/main/VERSION' };
