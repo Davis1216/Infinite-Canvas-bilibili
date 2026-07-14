@@ -238,6 +238,7 @@ MEDIA_PREVIEW_DIR = os.path.join(DATA_DIR, "media_previews")
 ASSET_LIBRARY_PATH = os.path.join(DATA_DIR, "asset_library.json")
 PROMPT_LIBRARY_PATH = os.path.join(DATA_DIR, "prompt_libraries.json")
 API_PROVIDERS_FILE = os.path.join(DATA_DIR, "api_providers.json")
+USAGE_PRICING_FILE = os.path.join(DATA_DIR, "usage_pricing.json")
 RUNNINGHUB_WORKFLOW_STORE_FILE = os.path.join(DATA_DIR, "runninghub_workflows.json")
 SHARED_FOLDERS_FILE = os.path.join(DATA_DIR, "shared_folders.json")
 GLOBAL_CONFIG_FILE = os.path.join(BASE_DIR, "global_config.json")
@@ -2515,6 +2516,17 @@ def chat_system_prompt(payload):
     prompt = str(getattr(payload, "system_prompt", "") or "").strip()
     return prompt or SYSTEM_PROMPT
 
+def chat_usage_meta(provider_id: str, provider: Optional[dict] = None):
+    provider_id = str(provider_id or "").strip().lower() or "unknown"
+    try:
+        provider = provider or (get_api_provider(provider_id) if provider_id not in {"modelscope", "unknown"} else modelscope_provider_config() if provider_id == "modelscope" else {})
+    except Exception:
+        provider = provider or {}
+    return {
+        "provider_id": provider_id,
+        "provider_name": (provider or {}).get("name") or ("ModelScope" if provider_id == "modelscope" else provider_id),
+    }
+
 class MsGenerateRequest(BaseModel):
     prompt: str
     api_key: str = ""
@@ -2981,6 +2993,813 @@ def save_to_history(record):
         history.insert(0, record)
         with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
             json.dump(history[:5000], f, ensure_ascii=False, indent=4)
+
+def history_has_success_usage(provider_id="", task_id="", request_id=""):
+    provider_id = str(provider_id or "").strip().lower()
+    task_id = str(task_id or "").strip()
+    request_id = str(request_id or "").strip()
+    if not task_id and not request_id:
+        return False
+    with HISTORY_LOCK:
+        if not os.path.exists(HISTORY_FILE):
+            return False
+        try:
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                history = json.load(f)
+        except Exception:
+            return False
+    for item in history if isinstance(history, list) else []:
+        if not isinstance(item, dict):
+            continue
+        item_provider = str(item.get("provider_id") or (item.get("params") or {}).get("provider_id") or "").strip().lower()
+        if provider_id and item_provider and item_provider != provider_id:
+            continue
+        if task_id and str(item.get("task_id") or "").strip() == task_id:
+            return True
+        if request_id and str(item.get("request_id") or "").strip() == request_id:
+            return True
+    return False
+
+def usage_preserved_history_record(record):
+    preserved = dict(record or {})
+    images = preserved.get("images") if isinstance(preserved.get("images"), list) else []
+    image_items = preserved.get("image_items") if isinstance(preserved.get("image_items"), list) else []
+    output_count = usage_number(preserved.get("image_output_count")) or len(image_items) or len(images)
+    if usage_record_kind(preserved) == "image":
+        preserved["image_count"] = usage_number(preserved.get("image_count")) or 1
+        preserved["image_request_count"] = usage_number(preserved.get("image_request_count")) or preserved["image_count"]
+        preserved["image_output_count"] = output_count or preserved["image_count"]
+    preserved["archive_deleted_at"] = time.time()
+    preserved["usage_preserved"] = True
+    preserved["deleted_image_count"] = output_count
+    preserved["images"] = []
+    preserved["image_items"] = []
+    return preserved
+
+def save_usage_event_best_effort(record):
+    try:
+        save_to_history(record)
+    except Exception as exc:
+        print(f"[usage] save failed: {exc}")
+
+def aggregate_raw_usage(raw_items):
+    totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    found = False
+    for raw in raw_items or []:
+        usage = raw.get("usage") if isinstance(raw, dict) else None
+        if not isinstance(usage, dict):
+            continue
+        found = True
+        tokens = usage_extract_tokens(usage)
+        totals["prompt_tokens"] += tokens["input_tokens"]
+        totals["completion_tokens"] += tokens["output_tokens"]
+        totals["total_tokens"] += tokens["total_tokens"]
+    return totals if found else None
+
+def save_canvas_llm_usage(payload, provider, model, raw_usage=None):
+    provider = provider or {}
+    save_usage_event_best_effort({
+        "timestamp": time.time(),
+        "type": "canvas-llm",
+        "source": "canvas",
+        "prompt": str(getattr(payload, "message", "") or "")[:1000],
+        "model": model,
+        "provider_id": provider.get("id") or getattr(payload, "provider", "") or "unknown",
+        "provider_name": provider.get("name") or provider.get("id") or getattr(payload, "provider", "") or "unknown",
+        "request_count": 1,
+        "raw_usage": raw_usage,
+        "params": {
+            "provider_id": provider.get("id") or getattr(payload, "provider", ""),
+            "model": model,
+            "images": len(getattr(payload, "images", []) or []),
+            "videos": len(getattr(payload, "videos", []) or []),
+        },
+    })
+
+def save_canvas_video_usage(payload, provider, result):
+    if not isinstance(result, dict):
+        return
+    videos = result.get("videos") or result.get("video_urls") or []
+    if isinstance(videos, str):
+        videos = [videos]
+    if not videos:
+        return
+    provider = provider or {}
+    raw = result.get("raw") if isinstance(result.get("raw"), dict) else {}
+    task_id = result.get("task_id") or (extract_task_id(raw) if isinstance(raw, dict) else "")
+    duration = usage_number(getattr(payload, "duration", None) or result.get("duration") or result.get("duration_seconds"))
+    video_count = len(videos)
+    save_usage_event_best_effort({
+        "timestamp": time.time(),
+        "type": "canvas-video",
+        "source": "canvas",
+        "prompt": getattr(payload, "prompt", "") or "",
+        "videos": videos,
+        "video_count": video_count,
+        "video_seconds": duration * max(1, video_count),
+        "request_count": 1,
+        "model": result.get("model") or getattr(payload, "model", "") or "",
+        "provider_id": provider.get("id") or getattr(payload, "provider_id", "") or "unknown",
+        "provider_name": provider.get("name") or provider.get("id") or getattr(payload, "provider_id", "") or "unknown",
+        "task_id": task_id,
+        "request_id": raw.get("id") if isinstance(raw, dict) else "",
+        "raw_usage": raw.get("usage") if isinstance(raw, dict) else None,
+        "params": {
+            "provider_id": provider.get("id") or getattr(payload, "provider_id", ""),
+            "model": result.get("model") or getattr(payload, "model", ""),
+            "duration": duration,
+            "aspect_ratio": getattr(payload, "aspect_ratio", ""),
+            "resolution": getattr(payload, "resolution", ""),
+        },
+    })
+
+USAGE_PRICE_KEYS = ("input_per_1m", "output_per_1m", "image_each", "video_second", "request_each")
+USAGE_LEGACY_PRICE_KEYS = ("input_per_1k", "output_per_1k", "total_per_1k")
+USAGE_MODEL_KIND_PRIORITY = {"chat": 1, "image": 2, "video": 3}
+
+def usage_default_pricing():
+    return {
+        "currency": "CNY",
+        "provider_defaults": {},
+        "model_overrides": {},
+        "updated_at": None,
+    }
+
+def load_usage_pricing():
+    default = usage_default_pricing()
+    if not os.path.exists(USAGE_PRICING_FILE):
+        return default
+    try:
+        with open(USAGE_PRICING_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        if not isinstance(raw, dict):
+            return default
+        pricing = {**default, **raw}
+        pricing["currency"] = str(pricing.get("currency") or "CNY").upper()[:8]
+        pricing["provider_defaults"] = pricing.get("provider_defaults") if isinstance(pricing.get("provider_defaults"), dict) else {}
+        pricing["model_overrides"] = pricing.get("model_overrides") if isinstance(pricing.get("model_overrides"), dict) else {}
+        pricing["provider_defaults"] = {key: clean_usage_price_map(value) for key, value in pricing["provider_defaults"].items()}
+        pricing["model_overrides"] = {key: clean_usage_price_map(value) for key, value in pricing["model_overrides"].items()}
+        return pricing
+    except Exception as exc:
+        print(f"读取 usage pricing 失败: {exc}")
+        return default
+
+def clean_usage_price_map(value):
+    if not isinstance(value, dict):
+        return {}
+    cleaned = {}
+    for key in USAGE_PRICE_KEYS:
+        raw = value.get(key, 0)
+        try:
+            num = float(raw or 0)
+        except (TypeError, ValueError):
+            num = 0.0
+        cleaned[key] = max(0.0, num)
+    def legacy_per_m(key):
+        try:
+            return max(0.0, float(value.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0.0
+    if not cleaned["input_per_1m"] and value.get("input_per_1k") not in (None, ""):
+        cleaned["input_per_1m"] = legacy_per_m("input_per_1k")
+    if not cleaned["output_per_1m"] and value.get("output_per_1k") not in (None, ""):
+        cleaned["output_per_1m"] = legacy_per_m("output_per_1k")
+    if not cleaned["input_per_1m"] and not cleaned["output_per_1m"] and value.get("total_per_1k") not in (None, ""):
+        total_per_1m = legacy_per_m("total_per_1k")
+        cleaned["input_per_1m"] = total_per_1m
+        cleaned["output_per_1m"] = total_per_1m
+    note = str(value.get("note") or "").strip()
+    if note:
+        cleaned["note"] = note[:160]
+    display_model = str(value.get("display_model") or "").strip()
+    if display_model:
+        cleaned["display_model"] = display_model[:180]
+    return cleaned
+
+def save_usage_pricing(payload):
+    provider_defaults = payload.get("provider_defaults") if isinstance(payload, dict) else {}
+    model_overrides = payload.get("model_overrides") if isinstance(payload, dict) else {}
+    cleaned = {
+        "currency": str((payload or {}).get("currency") or "CNY").upper()[:8],
+        "provider_defaults": {},
+        "model_overrides": {},
+        "updated_at": int(time.time()),
+    }
+    if isinstance(provider_defaults, dict):
+        for provider_id, price in provider_defaults.items():
+            safe_provider = re.sub(r"[^a-zA-Z0-9_.:-]", "-", str(provider_id or "").strip().lower())[:100]
+            if safe_provider:
+                cleaned["provider_defaults"][safe_provider] = clean_usage_price_map(price)
+    if isinstance(model_overrides, dict):
+        for model_key, price in model_overrides.items():
+            safe_key = str(model_key or "").strip()[:260]
+            if safe_key:
+                cleaned["model_overrides"][safe_key] = clean_usage_price_map(price)
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(USAGE_PRICING_FILE, "w", encoding="utf-8") as f:
+        json.dump(cleaned, f, ensure_ascii=False, indent=2)
+    return cleaned
+
+def usage_normalize_model(model):
+    value = str(model or "").strip()
+    if not value:
+        return "unknown"
+    value = value.replace("\\", "/")
+    value = re.sub(r"\s+", "", value).lower()
+    value = re.sub(r"^(models/|model/)", "", value)
+    value = re.sub(r"([?&#].*)$", "", value)
+    return value[:180] or "unknown"
+
+def usage_model_key(provider_id, model):
+    return f"{str(provider_id or 'unknown').strip().lower()}::{usage_normalize_model(model)}"
+
+def usage_kind_for_model_list(list_key):
+    if list_key == "image_models":
+        return "image"
+    if list_key == "video_models":
+        return "video"
+    return "chat"
+
+def usage_merge_model_kind(current, candidate):
+    if not current:
+        return candidate or "other"
+    if not candidate:
+        return current
+    return candidate if USAGE_MODEL_KIND_PRIORITY.get(candidate, 0) > USAGE_MODEL_KIND_PRIORITY.get(current, 0) else current
+
+def usage_provider_catalog():
+    providers = load_api_providers()
+    catalog = {}
+    model_to_provider = {}
+    for provider in providers:
+        provider_id = str(provider.get("id") or "unknown").strip().lower()
+        catalog[provider_id] = {
+            "id": provider_id,
+            "name": provider.get("name") or provider_id,
+            "image_models": provider.get("image_models") or [],
+            "chat_models": provider.get("chat_models") or [],
+            "video_models": provider.get("video_models") or [],
+            "configured_models": [],
+            "model_kinds": {},
+        }
+        for key in ("image_models", "chat_models", "video_models"):
+            for model in provider.get(key) or []:
+                norm = usage_normalize_model(model)
+                kind = usage_kind_for_model_list(key)
+                model_to_provider.setdefault(norm, provider_id)
+                model_key = usage_model_key(provider_id, model)
+                catalog[provider_id]["model_kinds"][norm] = usage_merge_model_kind(catalog[provider_id]["model_kinds"].get(norm), kind)
+                existing = next((item for item in catalog[provider_id]["configured_models"] if item.get("model_key") == model_key), None)
+                if existing:
+                    existing["kind"] = usage_merge_model_kind(existing.get("kind"), kind)
+                else:
+                    catalog[provider_id]["configured_models"].append({
+                        "id": norm,
+                        "name": str(model),
+                        "provider_id": provider_id,
+                        "provider_name": catalog[provider_id]["name"],
+                        "model_key": model_key,
+                        "kind": kind,
+                    })
+        if provider_id == "runninghub":
+            for entry in provider.get("rh_workflows") or []:
+                model = f"runninghub:workflow:{entry.get('id')}"
+                norm = usage_normalize_model(model)
+                model_to_provider[norm] = provider_id
+                catalog[provider_id]["model_kinds"][norm] = "image"
+                catalog[provider_id]["configured_models"].append({
+                    "id": norm,
+                    "name": entry.get("title") or model,
+                    "provider_id": provider_id,
+                    "provider_name": catalog[provider_id]["name"],
+                    "model_key": usage_model_key(provider_id, model),
+                    "kind": "image",
+                })
+            for entry in provider.get("rh_apps") or []:
+                model = f"runninghub:app:{entry.get('id')}"
+                norm = usage_normalize_model(model)
+                model_to_provider[norm] = provider_id
+                catalog[provider_id]["model_kinds"][norm] = "image"
+                catalog[provider_id]["configured_models"].append({
+                    "id": norm,
+                    "name": entry.get("title") or model,
+                    "provider_id": provider_id,
+                    "provider_name": catalog[provider_id]["name"],
+                    "model_key": usage_model_key(provider_id, model),
+                    "kind": "image",
+                })
+    return catalog, model_to_provider
+
+def usage_catalog_model_kind(catalog, provider_id, model, fallback="other"):
+    provider = catalog.get(str(provider_id or "").strip().lower())
+    if not provider:
+        return fallback or "other"
+    norm = usage_normalize_model(model)
+    return provider.get("model_kinds", {}).get(norm) or fallback or "other"
+
+def usage_provider_name(provider_id, provider_name, catalog):
+    provider_id = str(provider_id or "unknown").strip().lower() or "unknown"
+    if provider_name:
+        return str(provider_name)[:80]
+    if provider_id in catalog:
+        return catalog[provider_id]["name"]
+    return "未知供应商" if provider_id == "unknown" else provider_id
+
+def usage_number(value):
+    try:
+        if value is None or value == "":
+            return 0
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+def usage_extract_tokens(raw_usage):
+    usage = raw_usage if isinstance(raw_usage, dict) else {}
+    input_tokens = usage_number(
+        usage.get("input_tokens")
+        or usage.get("prompt_tokens")
+        or usage.get("promptTokens")
+        or usage.get("inputTokens")
+    )
+    output_tokens = usage_number(
+        usage.get("output_tokens")
+        or usage.get("completion_tokens")
+        or usage.get("completionTokens")
+        or usage.get("outputTokens")
+    )
+    total_tokens = usage_number(
+        usage.get("total_tokens")
+        or usage.get("totalTokens")
+        or usage.get("total")
+    )
+    if not total_tokens:
+        total_tokens = input_tokens + output_tokens
+    if total_tokens and not input_tokens and not output_tokens:
+        return {"input_tokens": 0, "output_tokens": 0, "total_tokens": total_tokens}
+    return {"input_tokens": input_tokens, "output_tokens": output_tokens, "total_tokens": total_tokens}
+
+def usage_display_tokens(tokens, kind):
+    if kind == "chat":
+        return tokens
+    return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+def usage_count_media(record):
+    image_count = usage_number(record.get("image_count"))
+    image_output_count = usage_number(record.get("image_output_count"))
+    video_count = usage_number(record.get("video_count"))
+    audio_count = usage_number(record.get("audio_count"))
+    if not image_count:
+        image_count = len(record.get("image_items") or []) or len(record.get("images") or [])
+    if not image_output_count:
+        image_output_count = image_count
+    if not video_count:
+        video_count = len(record.get("videos") or record.get("video_urls") or [])
+    if not audio_count:
+        audio_count = len(record.get("audios") or record.get("audio_urls") or [])
+    video_seconds = usage_number(record.get("video_seconds") or record.get("duration_seconds"))
+    params = record.get("params") if isinstance(record.get("params"), dict) else {}
+    if not video_seconds:
+        duration = usage_number(params.get("duration") or record.get("duration"))
+        video_seconds = duration * max(1, video_count) if duration else 0
+    return image_count, image_output_count, video_count, audio_count, video_seconds
+
+def usage_successful_image_request_count(record, kind, image_output_count):
+    if kind != "image":
+        return 0
+    explicit = usage_number(record.get("image_request_count") or record.get("image_task_count"))
+    if explicit:
+        return explicit
+    status = str(record.get("status") or "").strip().lower()
+    if status in {"failed", "error", "running", "pending"}:
+        return 0
+    return 1 if image_output_count > 0 or record.get("image_url") or record.get("images") or record.get("image_items") else 0
+
+def usage_record_kind(record):
+    source = str(record.get("source") or "").strip()
+    record_type = str(record.get("type") or "").strip().lower()
+    if source == "local_workflow" or (record.get("workflow_json") and not record.get("provider_id")):
+        return "local"
+    if record_type in {"chat", "gpt", "agent_chat", "canvas-llm"}:
+        return "chat"
+    if record_type in {"online", "cloud", "angle", "klein", "canvas-image", "agent-image"}:
+        return "image"
+    if record_type in {"video", "canvas-video"}:
+        return "video"
+    if record.get("videos"):
+        return "video"
+    if record.get("images") or record.get("image_items"):
+        return "image"
+    return record_type or "other"
+
+def usage_timestamp(record, key="timestamp"):
+    raw = record.get(key)
+    if raw is None:
+        raw = record.get("created_at")
+    try:
+        ts = float(raw)
+        if ts > 100000000000:
+            ts = ts / 1000.0
+        return ts
+    except (TypeError, ValueError):
+        return 0.0
+
+def usage_day(ts):
+    if not ts:
+        return "未知"
+    return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+
+def usage_month_key(ts=None):
+    dt = datetime.datetime.fromtimestamp(ts or time.time())
+    return dt.strftime("%Y-%m")
+
+def usage_infer_provider(model, catalog, model_to_provider):
+    norm = usage_normalize_model(model)
+    provider_id = model_to_provider.get(norm)
+    if provider_id:
+        return provider_id
+    return "unknown"
+
+def usage_event_from_history(record, catalog, model_to_provider):
+    if not isinstance(record, dict):
+        return None
+    kind = usage_record_kind(record)
+    params = record.get("params") if isinstance(record.get("params"), dict) else {}
+    model = str(record.get("model") or params.get("model") or "").strip()
+    provider_id = str(record.get("provider_id") or params.get("provider_id") or "").strip().lower()
+    if not provider_id:
+        if kind == "local":
+            provider_id = "local"
+        elif str(record.get("type") or "").lower() in {"cloud", "angle", "klein"} or (model and "/" in model):
+            provider_id = "modelscope"
+        else:
+            provider_id = usage_infer_provider(model, catalog, model_to_provider)
+    if provider_id == "runninghub":
+        params = record.get("params") if isinstance(record.get("params"), dict) else {}
+        workflow_id = params.get("workflowId") or params.get("workflow_id") or record.get("workflowId")
+        app_id = params.get("appId") or params.get("app_id") or record.get("appId")
+        if workflow_id:
+            model = f"runninghub:workflow:{workflow_id}"
+        elif app_id:
+            model = f"runninghub:app:{app_id}"
+    if not model:
+        model = str(record.get("workflow_json") or record.get("type") or "unknown")
+    configured_kind = usage_catalog_model_kind(catalog, provider_id, model, "")
+    if configured_kind:
+        kind = configured_kind if kind != "local" else "local"
+    image_count, image_output_count, video_count, audio_count, video_seconds = usage_count_media(record)
+    image_request_count = usage_successful_image_request_count(record, kind, image_output_count)
+    raw_tokens = usage_extract_tokens(record.get("raw_usage"))
+    tokens = usage_display_tokens(raw_tokens, kind)
+    return {
+        "id": f"history:{record.get('timestamp', '')}:{record.get('task_id', '')}:{model}",
+        "timestamp": usage_timestamp(record),
+        "source": "history",
+        "kind": kind,
+        "configured_kind": configured_kind or kind,
+        "provider_id": provider_id or "unknown",
+        "provider_name": usage_provider_name(provider_id, record.get("provider_name"), catalog),
+        "model": model,
+        "display_model": str(model),
+        "request_count": max(1, usage_number(record.get("request_count"))),
+        "image_count": image_request_count,
+        "image_output_count": image_output_count,
+        "video_count": video_count,
+        "video_seconds": video_seconds,
+        "audio_count": audio_count,
+        "input_tokens": tokens["input_tokens"],
+        "output_tokens": tokens["output_tokens"],
+        "total_tokens": tokens["total_tokens"],
+        "raw_input_tokens": raw_tokens["input_tokens"],
+        "raw_output_tokens": raw_tokens["output_tokens"],
+        "raw_total_tokens": raw_tokens["total_tokens"],
+        "raw_usage": record.get("raw_usage"),
+    }
+
+def usage_iter_conversations():
+    if not os.path.isdir(CONVERSATION_DIR):
+        return
+    for root, _dirs, files in os.walk(CONVERSATION_DIR):
+        for name in files:
+            if not name.endswith(".json"):
+                continue
+            path = os.path.join(root, name)
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    conversation = json.load(f)
+            except Exception:
+                continue
+            if isinstance(conversation, dict):
+                yield conversation
+
+def usage_events_from_conversations(catalog, model_to_provider):
+    events = []
+    for conversation in usage_iter_conversations() or []:
+        for message in conversation.get("messages") or []:
+            if not isinstance(message, dict) or message.get("role") != "assistant":
+                continue
+            if not (message.get("raw_usage") or message.get("model") or message.get("type") == "image" or message.get("image_url")):
+                continue
+            model = str(message.get("model") or "unknown").strip() or "unknown"
+            provider_id = str(message.get("provider_id") or "").strip().lower()
+            if not provider_id:
+                provider_id = usage_infer_provider(model, catalog, model_to_provider)
+            configured_kind = usage_catalog_model_kind(catalog, provider_id, model, "")
+            kind = configured_kind or ("image" if message.get("type") == "image" or message.get("image_url") else "chat")
+            raw_tokens = usage_extract_tokens(message.get("raw_usage"))
+            tokens = usage_display_tokens(raw_tokens, kind)
+            image_count = usage_number(message.get("image_count"))
+            if not image_count and kind == "image":
+                image_count = len(message.get("image_urls") or []) or (1 if message.get("image_url") else 0)
+            image_output_count = usage_number(message.get("image_output_count")) or image_count
+            image_request_count = usage_number(message.get("image_request_count")) or (1 if kind == "image" and image_output_count else 0)
+            events.append({
+                "id": f"conversation:{conversation.get('id', '')}:{message.get('id', '')}",
+                "timestamp": usage_timestamp(message, "created_at"),
+                "source": "conversation",
+                "kind": kind,
+                "configured_kind": configured_kind or kind,
+                "provider_id": provider_id or "unknown",
+                "provider_name": usage_provider_name(provider_id, message.get("provider_name"), catalog),
+                "model": model,
+                "display_model": model,
+                "request_count": max(1, usage_number(message.get("request_count"))),
+                "image_count": image_request_count,
+                "image_output_count": image_output_count,
+                "video_count": 0,
+                "video_seconds": usage_number(message.get("video_seconds")),
+                "audio_count": 0,
+                "input_tokens": tokens["input_tokens"],
+                "output_tokens": tokens["output_tokens"],
+                "total_tokens": tokens["total_tokens"],
+                "raw_input_tokens": raw_tokens["input_tokens"],
+                "raw_output_tokens": raw_tokens["output_tokens"],
+                "raw_total_tokens": raw_tokens["total_tokens"],
+                "raw_usage": message.get("raw_usage"),
+            })
+    return events
+
+def usage_events():
+    catalog, model_to_provider = usage_provider_catalog()
+    events = []
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                history = json.load(f)
+            for record in history if isinstance(history, list) else []:
+                event = usage_event_from_history(record, catalog, model_to_provider)
+                if event:
+                    events.append(event)
+        except Exception as exc:
+            print(f"读取 usage history 失败: {exc}")
+    events.extend(usage_events_from_conversations(catalog, model_to_provider))
+    return events, catalog
+
+def usage_price_for_event(event, pricing, catalog=None):
+    provider_id = event["provider_id"]
+    model_key = usage_model_key(provider_id, event["model"])
+    provider_price = clean_usage_price_map((pricing.get("provider_defaults") or {}).get(provider_id) or {})
+    model_price = clean_usage_price_map((pricing.get("model_overrides") or {}).get(model_key) or {})
+    merged = {**provider_price, **model_price}
+    price_kind = usage_catalog_model_kind(catalog or {}, provider_id, event["model"], event.get("configured_kind") or event.get("kind") or "other")
+    if price_kind == "chat":
+        active_price_keys = ("input_per_1m", "output_per_1m", "request_each")
+    elif price_kind == "image":
+        active_price_keys = ("image_each",)
+    elif price_kind == "video":
+        active_price_keys = ("video_second",)
+    else:
+        active_price_keys = ()
+    has_pricing = any(float(merged.get(key) or 0) > 0 for key in active_price_keys)
+    cost = 0.0
+    if price_kind == "chat":
+        cost += (event["input_tokens"] / 1000000.0) * float(merged.get("input_per_1m") or 0)
+        cost += (event["output_tokens"] / 1000000.0) * float(merged.get("output_per_1m") or 0)
+        cost += event["request_count"] * float(merged.get("request_each") or 0)
+    elif price_kind == "image":
+        cost += event.get("image_output_count", event["image_count"]) * float(merged.get("image_each") or 0)
+    elif price_kind == "video":
+        cost += event.get("video_seconds", 0) * float(merged.get("video_second") or 0)
+    return cost, has_pricing, model_key, price_kind
+
+def usage_filter_events(events, start="", end="", provider="", model="", kind="", billable_only=False, pricing=None, catalog=None):
+    start_ts = None
+    end_ts = None
+    try:
+        if start:
+            start_ts = datetime.datetime.strptime(start, "%Y-%m-%d").timestamp()
+        if end:
+            end_ts = datetime.datetime.strptime(end, "%Y-%m-%d").timestamp() + 86399
+    except ValueError:
+        start_ts = end_ts = None
+    provider = str(provider or "").strip().lower()
+    model_norm = usage_normalize_model(model) if model else ""
+    kind = str(kind or "").strip().lower()
+    filtered = []
+    pricing = pricing or load_usage_pricing()
+    for event in events:
+        if start_ts and event["timestamp"] and event["timestamp"] < start_ts:
+            continue
+        if end_ts and event["timestamp"] and event["timestamp"] > end_ts:
+            continue
+        if provider and event["provider_id"] != provider:
+            continue
+        if model_norm and usage_normalize_model(event["model"]) != model_norm:
+            continue
+        if kind and event["kind"] != kind:
+            continue
+        cost, has_pricing, model_key, price_kind = usage_price_for_event(event, pricing, catalog)
+        if billable_only and not has_pricing:
+            continue
+        event = {**event, "cost": cost, "has_pricing": has_pricing, "model_key": model_key, "price_kind": price_kind}
+        filtered.append(event)
+    return filtered
+
+def usage_empty_summary(currency):
+    return {
+        "currency": currency,
+        "kpis": {"total_cost": 0, "request_count": 0, "total_tokens": 0, "image_count": 0, "image_output_count": 0, "video_count": 0, "video_seconds": 0, "month_cost": 0, "month_cost_delta": 0},
+        "trend": [],
+        "provider_pie": [],
+        "model_pie": [],
+        "top_models": [],
+        "model_rows": [],
+        "providers": [],
+        "models": [],
+        "price_models": [],
+        "all_providers": [],
+        "all_price_models": [],
+        "unpriced_count": 0,
+        "event_count": 0,
+    }
+
+def usage_catalog_providers(catalog):
+    return [{"id": key, "name": item["name"]} for key, item in sorted(catalog.items())]
+
+def usage_catalog_models(catalog):
+    seen = set()
+    options = []
+    for provider_id, provider in sorted(catalog.items()):
+        for item in provider.get("configured_models") or []:
+            option_key = item.get("model_key") or usage_model_key(provider_id, item.get("name"))
+            if option_key in seen:
+                continue
+            seen.add(option_key)
+            name = item.get("name") or item.get("id") or "unknown"
+            options.append({
+                "id": item.get("id") or usage_normalize_model(name),
+                "name": f"{provider.get('name') or provider_id} · {name}",
+                "provider_id": provider_id,
+                "provider_name": provider.get("name") or provider_id,
+                "model": name,
+                "model_key": option_key,
+                "kind": item.get("kind") or "other",
+            })
+    options.sort(key=lambda item: item["name"].lower())
+    return options
+
+def usage_build_summary(events, catalog, pricing):
+    currency = str(pricing.get("currency") or "CNY").upper()
+    catalog_providers = usage_catalog_providers(catalog)
+    catalog_models = usage_catalog_models(catalog)
+    if not events:
+        summary = usage_empty_summary(currency)
+        summary["all_providers"] = catalog_providers
+        summary["all_price_models"] = catalog_models
+        return summary
+    by_day = {}
+    by_provider = {}
+    by_model = {}
+    provider_options = {}
+    model_options = {}
+    total_cost = request_count = total_tokens = image_count = image_output_count = video_count = video_seconds = 0
+    unpriced_count = 0
+    this_month = usage_month_key()
+    now = datetime.datetime.now()
+    prev_month_dt = (now.replace(day=1) - datetime.timedelta(days=1))
+    prev_month = prev_month_dt.strftime("%Y-%m")
+    month_cost = prev_month_cost = 0.0
+    for event in events:
+        total_cost += event["cost"]
+        request_count += event["request_count"]
+        total_tokens += event["total_tokens"]
+        image_count += event["image_count"]
+        image_output_count += event.get("image_output_count", event["image_count"])
+        video_count += event["video_count"]
+        video_seconds += event.get("video_seconds", 0)
+        if not event["has_pricing"]:
+            unpriced_count += 1
+        day = usage_day(event["timestamp"])
+        day_row = by_day.setdefault(day, {"date": day, "cost": 0, "requests": 0, "tokens": 0, "images": 0, "image_outputs": 0, "videos": 0, "video_seconds": 0})
+        day_row["cost"] += event["cost"]
+        day_row["requests"] += event["request_count"]
+        day_row["tokens"] += event["total_tokens"]
+        day_row["images"] += event["image_count"]
+        day_row["image_outputs"] += event.get("image_output_count", event["image_count"])
+        day_row["videos"] += event["video_count"]
+        day_row["video_seconds"] += event.get("video_seconds", 0)
+        provider_row = by_provider.setdefault(event["provider_id"], {"id": event["provider_id"], "label": event["provider_name"], "value": 0, "requests": 0})
+        provider_row["value"] += event["cost"]
+        provider_row["requests"] += event["request_count"]
+        model_key = event["model_key"]
+        row = by_model.setdefault(model_key, {
+            "model_key": model_key,
+            "provider_id": event["provider_id"],
+            "provider_name": event["provider_name"],
+            "model": event["display_model"],
+            "normalized_model": usage_normalize_model(event["model"]),
+            "request_count": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "image_count": 0,
+            "image_output_count": 0,
+            "video_count": 0,
+            "video_seconds": 0,
+            "audio_count": 0,
+            "cost": 0,
+            "has_pricing": False,
+            "last_used": 0,
+            "kinds": set(),
+        })
+        row["request_count"] += event["request_count"]
+        row["input_tokens"] += event["input_tokens"]
+        row["output_tokens"] += event["output_tokens"]
+        row["total_tokens"] += event["total_tokens"]
+        row["image_count"] += event["image_count"]
+        row["image_output_count"] += event.get("image_output_count", event["image_count"])
+        row["video_count"] += event["video_count"]
+        row["video_seconds"] += event.get("video_seconds", 0)
+        row["audio_count"] += event["audio_count"]
+        row["cost"] += event["cost"]
+        row["has_pricing"] = row["has_pricing"] or event["has_pricing"]
+        row["last_used"] = max(row["last_used"], event["timestamp"] or 0)
+        row["kinds"].add(event.get("price_kind") or event["kind"])
+        provider_options[event["provider_id"]] = event["provider_name"]
+        model_options[usage_normalize_model(event["model"])] = event["display_model"]
+        event_month = usage_month_key(event["timestamp"]) if event["timestamp"] else ""
+        if event_month == this_month:
+            month_cost += event["cost"]
+        elif event_month == prev_month:
+            prev_month_cost += event["cost"]
+    model_rows = []
+    for row in by_model.values():
+        row["kinds"] = sorted(row["kinds"])
+        row["last_used_label"] = datetime.datetime.fromtimestamp(row["last_used"]).strftime("%Y-%m-%d %H:%M") if row["last_used"] else ""
+        model_rows.append(row)
+    model_rows.sort(key=lambda item: (item["cost"], item["request_count"], item["last_used"]), reverse=True)
+    model_pie = [{"id": row["model_key"], "label": row["model"], "value": row["cost"], "requests": row["request_count"]} for row in model_rows[:10]]
+    if not any(item["value"] > 0 for item in model_pie):
+        model_pie = [{"id": row["model_key"], "label": row["model"], "value": row["request_count"], "requests": row["request_count"], "is_request_fallback": True} for row in model_rows[:10]]
+    provider_pie = list(by_provider.values())
+    if not any(item["value"] > 0 for item in provider_pie):
+        provider_pie = [{**item, "value": item["requests"], "is_request_fallback": True} for item in provider_pie]
+    provider_pie.sort(key=lambda item: item["value"], reverse=True)
+    trend = [by_day[key] for key in sorted(by_day.keys()) if key != "未知"]
+    delta = 0 if prev_month_cost == 0 else ((month_cost - prev_month_cost) / prev_month_cost)
+    filter_models = {}
+    for key, value in model_options.items():
+        filter_models.setdefault(key, {"id": key, "name": value})
+    price_models = {}
+    for row in model_rows:
+        price_models.setdefault(row["model_key"], {
+            "id": row["normalized_model"],
+            "name": f"{row['provider_name']} · {row['model']}",
+            "provider_id": row["provider_id"],
+            "provider_name": row["provider_name"],
+            "model": row["model"],
+            "model_key": row["model_key"],
+            "kind": row["kinds"][0] if row.get("kinds") else "other",
+        })
+    provider_results = {}
+    for key, value in provider_options.items():
+        provider_results.setdefault(key, {"id": key, "name": value})
+    return {
+        "currency": currency,
+        "kpis": {
+            "total_cost": total_cost,
+            "request_count": request_count,
+            "total_tokens": total_tokens,
+            "image_count": image_count,
+            "image_output_count": image_output_count,
+            "video_count": video_count,
+            "video_seconds": video_seconds,
+            "month_cost": month_cost,
+            "month_cost_delta": delta,
+        },
+        "trend": trend,
+        "provider_pie": provider_pie[:12],
+        "model_pie": model_pie,
+        "top_models": model_rows[:8],
+        "model_rows": model_rows[:100],
+        "providers": sorted(provider_results.values(), key=lambda item: item["name"].lower()),
+        "models": sorted(filter_models.values(), key=lambda item: item["name"].lower()),
+        "price_models": sorted(price_models.values(), key=lambda item: item["name"].lower()),
+        "all_providers": catalog_providers,
+        "all_price_models": catalog_models,
+        "unpriced_count": unpriced_count,
+        "event_count": len(events),
+    }
 
 def get_comfy_history(comfy_address, prompt_id):
     try:
@@ -10036,6 +10855,8 @@ async def build_chat_text_reply(payload, conversation):
             "content": text,
             "created_at": now_ms(),
             "model": model,
+            "mode": getattr(payload, "mode", "chat"),
+            **chat_usage_meta(provider_cfg.get("id"), provider_cfg),
             "raw_usage": None,
             "raw": raw,
         }
@@ -10049,6 +10870,8 @@ async def build_chat_text_reply(payload, conversation):
             "content": text,
             "created_at": now_ms(),
             "model": model,
+            "mode": getattr(payload, "mode", "chat"),
+            **chat_usage_meta(provider_cfg.get("id"), provider_cfg),
             "raw_usage": None,
             "raw": raw,
         }
@@ -10080,6 +10903,8 @@ async def build_chat_text_reply(payload, conversation):
         "content": text_from_chat_response(raw).strip() or "接口返回了空回复。",
         "created_at": now_ms(),
         "model": model,
+        "mode": getattr(payload, "mode", "chat"),
+        **chat_usage_meta(getattr(payload, "provider", ""), provider_cfg),
         "raw_usage": raw_data.get("usage") if isinstance(raw_data, dict) else None,
     }
 
@@ -11532,6 +12357,28 @@ async def ai_models():
 async def api_providers():
     return {"providers": public_api_providers()}
 
+@app.get("/api/usage/pricing")
+async def get_usage_pricing_api():
+    return load_usage_pricing()
+
+@app.post("/api/usage/pricing")
+async def save_usage_pricing_api(payload: Dict[str, Any]):
+    return save_usage_pricing(payload)
+
+@app.get("/api/usage/summary")
+async def get_usage_summary_api(
+    start: str = "",
+    end: str = "",
+    provider: str = "",
+    model: str = "",
+    kind: str = "",
+    billable_only: bool = False,
+):
+    pricing = load_usage_pricing()
+    raw_events, catalog = usage_events()
+    filtered = usage_filter_events(raw_events, start, end, provider, model, kind, billable_only, pricing, catalog)
+    return usage_build_summary(filtered, catalog, pricing)
+
 @app.put("/api/providers")
 async def save_providers(payload: List[ApiProviderPayload]):
     providers = []
@@ -12282,6 +13129,7 @@ async def build_online_image_result(payload: OnlineImageRequest):
     local_urls = [url for urls, _items, _raw in generated for url in (urls or []) if url]
     local_items = [item for _urls, items, _raw in generated for item in (items or []) if item.get("url")]
     raw = generated[0][2] if generated else {}
+    raw_usage = aggregate_raw_usage([_raw for _urls, _items, _raw in generated])
     if not local_urls:
         provider_name = provider.get("name") or provider["id"]
         raw_text = json.dumps(raw, ensure_ascii=False)[:800] if isinstance(raw, (dict, list)) else str(raw)[:800]
@@ -12293,12 +13141,16 @@ async def build_online_image_result(payload: OnlineImageRequest):
         "timestamp": time.time(),
         "type": "online",
         "model": model,
+        "image_count": 1,
+        "image_request_count": 1,
+        "image_output_count": len(local_items) or len(local_urls),
+        "request_count": 1,
         "provider_id": provider["id"],
         "provider_name": provider.get("name") or provider["id"],
         "task_id": extract_task_id(raw) if isinstance(raw, dict) else None,
         "request_id": raw.get("id") if isinstance(raw, dict) else None,
         "params": {"provider_id": provider["id"], "model": model, "size": payload.size, "quality": payload.quality, "temperature": normalize_image_temperature(payload.temperature), "n": count, "reference_images": refs},
-        "raw_usage": raw.get("usage") if isinstance(raw, dict) else None,
+        "raw_usage": raw_usage or (raw.get("usage") if isinstance(raw, dict) else None),
     }
     save_to_history(result)
     if GLOBAL_LOOP:
@@ -12347,6 +13199,10 @@ async def query_image_task(payload: ImageTaskQueryRequest):
             "timestamp": time.time(),
             "type": "online",
             "model": "",
+            "image_count": 1,
+            "image_request_count": 1,
+            "image_output_count": len(local_items) or len(local_urls),
+            "request_count": 1,
             "provider_id": provider["id"],
             "provider_name": provider.get("name") or provider["id"],
             "task_id": task_id,
@@ -12354,8 +13210,11 @@ async def query_image_task(payload: ImageTaskQueryRequest):
             "params": {"provider_id": provider["id"]},
             "raw": raw,
         }
-        save_to_history(result)
-        if GLOBAL_LOOP:
+        already_recorded = history_has_success_usage(provider["id"], task_id, result.get("request_id"))
+        result["usage_recorded"] = not already_recorded
+        if not already_recorded:
+            save_to_history(result)
+        if GLOBAL_LOOP and not already_recorded:
             asyncio.run_coroutine_threadsafe(manager.broadcast_new_image(result), GLOBAL_LOOP)
         return result
     if status in IMAGE_TASK_FAILED_STATUSES:
@@ -13015,10 +13874,14 @@ def volcengine_video_prompt_text(prompt, aspect_ratio="", duration=None):
 async def canvas_video(payload: CanvasVideoRequest):
     provider = get_api_provider(payload.provider_id)
     if is_jimeng_provider(provider):
-        return await generate_jimeng_video(payload, provider)
+        result = await generate_jimeng_video(payload, provider)
+        save_canvas_video_usage(payload, provider, result)
+        return result
     if is_runninghub_provider(provider):
         try:
-            return await generate_runninghub_video(payload, provider)
+            result = await generate_runninghub_video(payload, provider)
+            save_canvas_video_usage(payload, provider, result)
+            return result
         except httpx.HTTPStatusError as exc:
             text = exc.response.text
             raise HTTPException(status_code=exc.response.status_code, detail=f"RunningHub 视频接口错误：{text}") from exc
@@ -13043,7 +13906,9 @@ async def canvas_video(payload: CanvasVideoRequest):
     if is_agnes:
         try:
             async with httpx.AsyncClient(timeout=VIDEO_POLL_TIMEOUT) as agnes_client:
-                return await generate_agnes_video(agnes_client, payload, provider, base_url, requested_model)
+                result = await generate_agnes_video(agnes_client, payload, provider, base_url, requested_model)
+                save_canvas_video_usage(payload, provider, {**result, "model": requested_model} if isinstance(result, dict) else result)
+                return result
         except httpx.HTTPStatusError as exc:
             text = exc.response.text
             raise HTTPException(status_code=exc.response.status_code, detail=f"Agnes 视频接口错误：{text}") from exc
@@ -13055,7 +13920,9 @@ async def canvas_video(payload: CanvasVideoRequest):
     if is_yuli and yuli_is_veo_openai_model(requested_model):
         try:
             async with httpx.AsyncClient(timeout=VIDEO_POLL_TIMEOUT) as yuli_client:
-                return await generate_yuli_openai_video(yuli_client, payload, provider, base_url, requested_model)
+                result = await generate_yuli_openai_video(yuli_client, payload, provider, base_url, requested_model)
+                save_canvas_video_usage(payload, provider, {**result, "model": requested_model} if isinstance(result, dict) else result)
+                return result
         except httpx.HTTPStatusError as exc:
             text = exc.response.text
             raise HTTPException(status_code=exc.response.status_code, detail=f"上游视频接口错误：{text}") from exc
@@ -13398,7 +14265,9 @@ async def canvas_video(payload: CanvasVideoRequest):
             if not urls:
                 raise HTTPException(status_code=502, detail=f"视频生成成功但没有返回视频：{result}")
             local_urls = [await save_remote_video_to_output(url) for url in urls]
-            return {"videos": local_urls, "task_id": task_id, "raw": result}
+            final_result = {"videos": local_urls, "task_id": task_id, "raw": result, "model": body.get("model") or requested_model}
+            save_canvas_video_usage(payload, provider, final_result)
+            return final_result
     except httpx.HTTPStatusError as exc:
         text = exc.response.text
         try:
@@ -13469,11 +14338,13 @@ async def canvas_llm(payload: CanvasLLMRequest):
         model = selected_model(payload.model, (_provider.get("chat_models") or CODEX_DEFAULT_CHAT_MODELS)[0])
         payload.model = model
         text, raw = await codex_chat_text(payload, payload.messages)
+        save_canvas_llm_usage(payload, _provider, model, None)
         return {"text": text, "model": model, "raw_usage": None, "raw": raw}
     if is_gemini_cli_provider(_provider):
         model = selected_model(payload.model, (_provider.get("chat_models") or GEMINI_CLI_DEFAULT_CHAT_MODELS)[0])
         payload.model = model
         text, raw = await gemini_cli_chat_text(payload, payload.messages)
+        save_canvas_llm_usage(payload, _provider, model, None)
         return {"text": text, "model": model, "raw_usage": None, "raw": raw}
     chat_base, chat_hdrs, model = resolve_chat_provider(payload.provider, payload.model, payload.ms_model)
     # 判断协议：APIMart 异步 vs 标准 OpenAI
@@ -13551,7 +14422,9 @@ async def canvas_llm(payload: CanvasLLMRequest):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"解析回复内容失败：{exc}") from exc
     raw_data = unwrap_apimart_response(raw) if isinstance(raw, dict) else {}
-    return {"text": text, "model": model, "raw_usage": raw_data.get("usage")}
+    raw_usage = raw_data.get("usage") if isinstance(raw_data, dict) else None
+    save_canvas_llm_usage(payload, _llm_provider or _provider, model, raw_usage)
+    return {"text": text, "model": model, "raw_usage": raw_usage}
 
 # --- 对话管理 ---
 
@@ -14886,6 +15759,12 @@ async def chat(payload: ChatRequest, request: Request, x_user_id: str = Header(d
             "created_at": now_ms(),
             "model": model,
             "size": image_size,
+            "mode": payload.mode,
+            **chat_usage_meta(provider["id"], provider),
+            "image_count": 1,
+            "image_request_count": 1,
+            "image_output_count": 1 if local_url else 0,
+            "request_count": 1,
             "raw_usage": raw.get("usage") if isinstance(raw, dict) else None,
         }
     else:
@@ -14900,6 +15779,8 @@ async def chat(payload: ChatRequest, request: Request, x_user_id: str = Header(d
                 "content": text,
                 "created_at": now_ms(),
                 "model": model,
+                "mode": payload.mode,
+                **chat_usage_meta(_codex_provider.get("id"), _codex_provider),
                 "raw_usage": None,
                 "raw": raw,
             }
@@ -14917,6 +15798,8 @@ async def chat(payload: ChatRequest, request: Request, x_user_id: str = Header(d
                 "content": text,
                 "created_at": now_ms(),
                 "model": model,
+                "mode": payload.mode,
+                **chat_usage_meta(_codex_provider.get("id"), _codex_provider),
                 "raw_usage": None,
                 "raw": raw,
             }
@@ -14958,6 +15841,8 @@ async def chat(payload: ChatRequest, request: Request, x_user_id: str = Header(d
             "content": text_from_chat_response(raw).strip() or "接口返回了空回复。",
             "created_at": now_ms(),
             "model": model,
+            "mode": payload.mode,
+            **chat_usage_meta(payload.provider, _conv_provider),
             "raw_usage": raw_data.get("usage") if isinstance(raw_data, dict) else None,
         }
 
@@ -15035,13 +15920,18 @@ async def chat_agent(payload: ChatRequest, request: Request, x_user_id: str = He
             "created_at": now_ms(),
             "model": model,
             "provider": image_provider["id"],
+            "mode": "agent",
+            **chat_usage_meta(image_provider["id"], image_provider),
             "size": image_size,
-            "image_count": len(local_urls),
+            "image_count": 1,
+            "image_request_count": 1,
+            "image_output_count": len(local_urls),
+            "request_count": 1,
             "prompts": prompts,
             "agent_action": action,
             "agent_reply": decision.get("reply") or "",
             "used_references": tool_refs,
-            "raw_usage": raw_items[0].get("usage") if raw_items and isinstance(raw_items[0], dict) else None,
+            "raw_usage": aggregate_raw_usage(raw_items) or (raw_items[0].get("usage") if raw_items and isinstance(raw_items[0], dict) else None),
         }
     else:
         assistant_message = await build_chat_text_reply(payload, conversation)
@@ -15097,6 +15987,8 @@ async def chat_stream(payload: ChatRequest, request: Request, x_user_id: str = H
                 "content": text,
                 "created_at": now_ms(),
                 "model": model,
+                "mode": payload.mode,
+                **chat_usage_meta(_codex_provider.get("id"), _codex_provider),
                 "raw_usage": None,
                 "raw": raw,
             }
@@ -15125,6 +16017,8 @@ async def chat_stream(payload: ChatRequest, request: Request, x_user_id: str = H
                 "content": text,
                 "created_at": now_ms(),
                 "model": model,
+                "mode": payload.mode,
+                **chat_usage_meta(_codex_provider.get("id"), _codex_provider),
                 "raw_usage": None,
                 "raw": raw,
             }
@@ -15191,6 +16085,8 @@ async def chat_stream(payload: ChatRequest, request: Request, x_user_id: str = H
             "content": "".join(content_parts).strip() or "接口返回了空回复。",
             "created_at": now_ms(),
             "model": model,
+            "mode": payload.mode,
+            **chat_usage_meta(payload.provider, _stream_provider),
             "raw_usage": raw_usage,
         }
         conversation["messages"].append(assistant_message)
@@ -15253,6 +16149,7 @@ async def delete_history(req: DeleteHistoryRequest):
                     is_match = True
                 if is_match:
                     target_record = item
+                    new_history.append(usage_preserved_history_record(item))
                 else:
                     new_history.append(item)
             if target_record:
@@ -15320,7 +16217,16 @@ async def poll_angle_cloud(req: CloudPollRequest):
                     except Exception:
                         local_path = img_url
 
-                    record = {"timestamp": time.time(), "prompt": f"Resumed {task_id}", "images": [local_path], "type": "angle"}
+                    record = {
+                        "timestamp": time.time(),
+                        "prompt": f"Resumed {task_id}",
+                        "images": [local_path],
+                        "type": "angle",
+                        "model": "",
+                        "provider_id": "modelscope",
+                        "provider_name": "ModelScope",
+                        "task_id": task_id,
+                    }
                     save_to_history(record)
                     if req.client_id:
                         await manager.send_personal_message({"type": "cloud_status", "status": "SUCCEED", "task_id": task_id}, req.client_id)
@@ -15410,7 +16316,16 @@ async def generate_angle_cloud(req: CloudGenRequest):
                     except Exception:
                         local_path = img_url
 
-                    record = {"timestamp": time.time(), "prompt": req.prompt, "images": [local_path], "type": "angle"}
+                    record = {
+                        "timestamp": time.time(),
+                        "prompt": req.prompt,
+                        "images": [local_path],
+                        "type": "angle",
+                        "model": model,
+                        "provider_id": "modelscope",
+                        "provider_name": "ModelScope",
+                        "task_id": task_id,
+                    }
                     save_to_history(record)
                     if req.client_id:
                         await manager.send_personal_message({"type": "cloud_status", "status": "SUCCEED", "task_id": task_id}, req.client_id)
@@ -15509,7 +16424,16 @@ async def generate_cloud(req: CloudGenRequest):
                         print(f"Download error: {dl_e}")
                         local_path = img_url
 
-                    record = {"timestamp": time.time(), "prompt": req.prompt, "images": [local_path], "type": "cloud"}
+                    record = {
+                        "timestamp": time.time(),
+                        "prompt": req.prompt,
+                        "images": [local_path],
+                        "type": "cloud",
+                        "model": payload["model"],
+                        "provider_id": "modelscope",
+                        "provider_name": "ModelScope",
+                        "task_id": task_id,
+                    }
                     save_to_history(record)
                     try:
                         await manager.broadcast_new_image(record)
@@ -15610,6 +16534,9 @@ async def ms_generate(req: MsGenerateRequest):
                             "images": [local_path],
                             "type": "klein",
                             "model": req.model,
+                            "provider_id": "modelscope",
+                            "provider_name": "ModelScope",
+                            "task_id": task_id,
                         }
                         save_to_history(record)
                         if GLOBAL_LOOP:
@@ -15833,6 +16760,10 @@ def generate(req: GenerateRequest):
             "seed": seed,
             "timestamp": current_timestamp,
             "type": req.type,
+            "source": "local_workflow",
+            "provider_id": "local",
+            "provider_name": "本地 ComfyUI",
+            "model": req.workflow_json,
             "workflow_json": req.workflow_json,
             "task_id": task_id,
             "prompt_id": prompt_id,

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/images/logo.png" type="image/png">
+    <title>仪表盘</title>
+    <script>
+        (function(){
+            try {
+                var theme = localStorage.getItem('studio_theme') || localStorage.getItem('canvas_theme') || 'light';
+                if(theme === 'dark') {
+                    document.documentElement.classList.add('studio-theme-dark');
+                    document.documentElement.classList.add('theme-dark');
+                }
+            } catch(e) {}
+        })();
+    </script>
+    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1784008200"></script>
+    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
+    <link rel="stylesheet" href="/static/css/usage-dashboard.css?v=2026.07.14.9">
+</head>
+<body>
+    <main class="usage-shell">
+        <header class="usage-topbar">
+            <div>
+                <p class="usage-kicker">API USAGE</p>
+                <h1>仪表盘</h1>
+            </div>
+            <div class="usage-actions">
+                <button id="refreshBtn" class="icon-btn" type="button" title="刷新"><i data-lucide="refresh-cw"></i></button>
+                <button id="pricingOpenBtn" class="primary-btn" type="button"><i data-lucide="settings-2"></i><span>价格设置</span></button>
+            </div>
+        </header>
+
+        <section class="filter-bar">
+            <label>
+                <span>开始</span>
+                <input id="startInput" type="date">
+            </label>
+            <label>
+                <span>结束</span>
+                <input id="endInput" type="date">
+            </label>
+            <label>
+                <span>供应商</span>
+                <select id="providerSelect"><option value="">全部供应商</option></select>
+            </label>
+            <label>
+                <span>模型</span>
+                <select id="modelSelect"><option value="">全部模型</option></select>
+            </label>
+            <label>
+                <span>类型</span>
+                <select id="kindSelect">
+                    <option value="">全部类型</option>
+                    <option value="chat">GPT 对话</option>
+                    <option value="image">生图</option>
+                    <option value="video">视频</option>
+                    <option value="local">本地工作流</option>
+                    <option value="other">其他</option>
+                </select>
+            </label>
+            <label class="check-label">
+                <input id="billableOnlyInput" type="checkbox">
+                <span>仅可计费</span>
+            </label>
+        </section>
+
+        <section class="kpi-grid" id="kpiGrid">
+            <article class="metric-card"><span>总费用</span><strong id="totalCost">-</strong><small id="monthCost">本月 -</small></article>
+            <article class="metric-card"><span>总请求</span><strong id="requestCount">-</strong><small>聚合全部来源</small></article>
+            <article class="metric-card"><span>GPT Token</span><strong id="tokenCount">-</strong><small>输入 + 输出</small></article>
+            <article class="metric-card"><span>生图请求</span><strong id="imageCount">-</strong><small id="unpricedHint">未配置价格 -</small></article>
+        </section>
+
+        <section id="emptyState" class="empty-state" hidden>
+            <i data-lucide="bar-chart-3"></i>
+            <strong>暂无可显示的用量</strong>
+            <span>调整筛选条件，或先进行一次 GPT 对话/在线生图。</span>
+        </section>
+
+        <section class="chart-grid">
+            <article class="panel chart-panel wide">
+                <div class="panel-head">
+                    <div><h2>趋势</h2><p>每日费用、请求和 token</p></div>
+                    <span id="trendMeta" class="panel-badge">-</span>
+                </div>
+                <svg id="trendChart" class="line-chart" viewBox="0 0 760 260" role="img" aria-label="用量趋势"></svg>
+            </article>
+            <article class="panel chart-panel">
+                <div class="panel-head">
+                    <div><h2>供应商占比</h2><p>按费用，未计价时按请求</p></div>
+                </div>
+                <div class="pie-wrap">
+                    <svg id="providerPie" class="pie-chart" viewBox="0 0 220 220" role="img" aria-label="供应商占比"></svg>
+                    <div id="providerLegend" class="legend"></div>
+                </div>
+            </article>
+        </section>
+
+        <section class="chart-grid bottom">
+            <article class="panel">
+                <div class="panel-head">
+                    <div><h2>模型排行</h2><p>Top 模型用量</p></div>
+                </div>
+                <div id="topModels" class="rank-list"></div>
+            </article>
+            <article class="panel">
+                <div class="panel-head">
+                    <div><h2>模型占比</h2><p>去重后的模型视图</p></div>
+                </div>
+                <div class="pie-wrap compact">
+                    <svg id="modelPie" class="pie-chart" viewBox="0 0 220 220" role="img" aria-label="模型占比"></svg>
+                    <div id="modelLegend" class="legend"></div>
+                </div>
+            </article>
+        </section>
+
+        <section class="panel table-panel">
+            <div class="panel-head table-head">
+                <div><h2>明细表</h2><p>按供应商 + 模型归并，最多显示 100 行</p></div>
+                <label class="search-box"><i data-lucide="search"></i><input id="tableSearch" type="search" placeholder="搜索模型或供应商"></label>
+            </div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th data-sort="model">模型</th>
+                            <th data-sort="provider_name">供应商</th>
+                            <th data-sort="request_count">请求</th>
+                            <th data-sort="total_tokens">Token</th>
+                            <th data-sort="image_count">生图次数</th>
+                            <th data-sort="image_output_count">输出图</th>
+                            <th data-sort="video_seconds">视频(s)</th>
+                            <th data-sort="cost">费用</th>
+                            <th data-sort="last_used">最后使用</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usageTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <aside id="pricingDrawer" class="pricing-drawer" aria-hidden="true">
+        <div class="drawer-backdrop" data-close-pricing></div>
+        <form id="pricingForm" class="drawer-panel">
+            <header class="drawer-head">
+                <div><p class="usage-kicker">PRICING</p><h2>价格设置</h2></div>
+                <button class="icon-btn" type="button" data-close-pricing title="关闭"><i data-lucide="x"></i></button>
+            </header>
+            <label class="drawer-field">
+                <span>默认币种</span>
+                <select id="currencySelect">
+                    <option value="CNY">CNY</option>
+                    <option value="USD">USD</option>
+                </select>
+            </label>
+            <div class="drawer-note">价格单位：聊天模型按每 1M token 和每请求计价；生图模型按每张图计价；视频模型按每秒（/s）计价。模型覆盖价优先于供应商默认价。</div>
+            <section>
+                <div class="drawer-section-head">
+                    <h3>模型覆盖价</h3>
+                    <button id="addModelPriceBtn" class="ghost-btn" type="button"><i data-lucide="plus"></i><span>添加模型</span></button>
+                </div>
+                <div id="modelPricingList" class="pricing-list"></div>
+            </section>
+            <section>
+                <h3>供应商默认价（可选兜底）</h3>
+                <div id="providerPricingList" class="pricing-list"></div>
+            </section>
+            <footer class="drawer-actions">
+                <button class="ghost-btn" type="button" data-close-pricing>取消</button>
+                <button class="primary-btn" type="submit"><i data-lucide="save"></i><span>保存价格</span></button>
+            </footer>
+        </form>
+    </aside>
+
+    <script src="/static/js/usage-dashboard.js?v=2026.07.14.9"></script>
+</body>
+</html>
