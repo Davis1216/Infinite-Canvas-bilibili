@@ -30,7 +30,7 @@
         "nav.imageEdit": { zh: "图片编辑", en: "Image Edit" },
         "nav.angle": { zh: "角度控制", en: "Angle Control" },
         "nav.online": { zh: "在线生图", en: "Online Image" },
-        "nav.gpt": { zh: "GPT 对话", en: "GPT Chat" },
+        "nav.gpt": { zh: "头脑风暴", en: "Brainstorming" },
         "nav.usageDashboard": { zh: "仪表盘", en: "Dashboard" },
         "nav.canvas": { zh: "无限画布", en: "Infinite Canvas" },
         "nav.assetManager": { zh: "素材库", en: "Assets" },

@@ -93,7 +93,7 @@
 
     function showEmpty(message){
         $('emptyState').hidden = false;
-        $('emptyState').querySelector('span').textContent = message || '调整筛选条件，或先进行一次 GPT 对话/在线生图。';
+        $('emptyState').querySelector('span').textContent = message || '调整筛选条件，或先进行一次头脑风暴/在线生图。';
     }
 
     function renderSummary(){
@@ -470,7 +470,7 @@
                     <button class="icon-btn remove-price-btn" type="button" data-clear-provider="${escapeHtml(provider.id)}" title="清空"><i data-lucide="eraser"></i></button>
                 </div>
             `;
-        }).join('') || '<div class="drawer-note">暂无已使用供应商；产生一次 GPT 对话、生图或画布调用后这里会出现。</div>';
+        }).join('') || '<div class="drawer-note">暂无已使用供应商；产生一次头脑风暴、生图或画布调用后这里会出现。</div>';
         const overrides = pricing.model_overrides || {};
         const usedModels = state.summary?.price_models || [];
         const usedRows = usedModels.map(model => modelPriceRow(model.model_key, overrides[model.model_key] || {}, {locked:false, model}));

@@ -78,6 +78,7 @@ class ChatFrameworkTests(unittest.TestCase):
                 main.CHAT_RUN_TASKS.pop(run_id, None)
         shutil.rmtree(os.path.join(main.CONVERSATION_DIR, self.user_id), ignore_errors=True)
         shutil.rmtree(os.path.join(main.CHAT_RUN_DIR, self.user_id), ignore_errors=True)
+        shutil.rmtree(os.path.join(main.JINNI_DIR, self.user_id), ignore_errors=True)
 
     def create_conversation(self, title="新对话"):
         response = self.client.post("/api/conversations", headers=self.headers, json={"title": title})
@@ -185,6 +186,93 @@ class ChatFrameworkTests(unittest.TestCase):
         recovered = main.CHAT_RUNS[interrupted_id]
         self.assertEqual(recovered["status"], "interrupted")
         self.assertEqual(recovered["partial_content"], "部分回复")
+
+    def test_jinni_crud_user_isolation_snapshot_and_delete(self):
+        payload = {
+            "name": "创意导演",
+            "description": "帮助完善视觉创意",
+            "instructions": "你是一名资深创意导演。",
+            "starters": ["帮我构思海报", "分析这张参考图"],
+            "provider_id": "test",
+            "chat_model": "test-model",
+            "image_provider_id": "test",
+            "image_model": "test-image",
+            "capabilities": {"generate_image": True, "edit_image": True},
+            "knowledge_files": [],
+        }
+        created = self.client.post("/api/jinnis", headers=self.headers, json=payload)
+        self.assertEqual(created.status_code, 200)
+        jinni = created.json()["jinni"]
+        self.assertEqual(jinni["name"], "创意导演")
+        self.assertTrue(jinni["capabilities"]["chat"])
+
+        listed = self.client.get("/api/jinnis", headers=self.headers, params={"q": "视觉"})
+        self.assertEqual([item["id"] for item in listed.json()["jinnis"]], [jinni["id"]])
+        stranger_headers = {"X-User-ID": f"other-{uuid.uuid4().hex}"}
+        self.assertEqual(self.client.get("/api/jinnis", headers=stranger_headers).json()["jinnis"], [])
+
+        conversation_response = self.client.post(f"/api/jinnis/{jinni['id']}/conversations", headers=self.headers)
+        self.assertEqual(conversation_response.status_code, 200)
+        conversation = conversation_response.json()["conversation"]
+        self.assertEqual(conversation["jinni_snapshot"]["name"], "创意导演")
+
+        updated = self.client.patch(
+            f"/api/jinnis/{jinni['id']}", headers=self.headers,
+            json={"name": "新版创意导演", "instructions": "使用新版本指令。"},
+        )
+        self.assertEqual(updated.status_code, 200)
+        frozen = main.load_conversation(self.user_id, conversation["id"])
+        self.assertEqual(frozen["jinni_snapshot"]["name"], "创意导演")
+        fresh = self.client.post(f"/api/jinnis/{jinni['id']}/conversations", headers=self.headers).json()["conversation"]
+        self.assertEqual(fresh["jinni_snapshot"]["name"], "新版创意导演")
+
+        deleted = self.client.delete(f"/api/jinnis/{jinni['id']}", headers=self.headers)
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(main.load_conversation(self.user_id, conversation["id"])["jinni_snapshot"]["instructions"], "你是一名资深创意导演。")
+        records = self.client.get("/api/conversations", headers=self.headers).json()["conversations"]
+        self.assertTrue(next(item for item in records if item["id"] == conversation["id"])["jinni"]["deleted"])
+
+    def test_jinni_knowledge_limits_runtime_and_model_override(self):
+        knowledge_name = f"jinni_{uuid.uuid4().hex}.txt"
+        knowledge_path = os.path.join(main.OUTPUT_INPUT_DIR, knowledge_name)
+        os.makedirs(main.OUTPUT_INPUT_DIR, exist_ok=True)
+        with open(knowledge_path, "w", encoding="utf-8") as file:
+            file.write("品牌主色是深海蓝。")
+        self.addCleanup(lambda: os.path.exists(knowledge_path) and os.remove(knowledge_path))
+        payload = {
+            "name": "品牌助手",
+            "instructions": "只依据品牌资料回答。",
+            "provider_id": "test",
+            "chat_model": "base-model",
+            "capabilities": {"generate_image": False, "edit_image": False},
+            "knowledge_files": [{"url": f"/assets/input/{knowledge_name}", "name": knowledge_name, "kind": "file"}],
+        }
+        jinni = self.client.post("/api/jinnis", headers=self.headers, json=payload).json()["jinni"]
+        conversation = self.client.post(f"/api/jinnis/{jinni['id']}/conversations", headers=self.headers).json()["conversation"]
+
+        patched = self.client.patch(
+            f"/api/conversations/{conversation['id']}", headers=self.headers,
+            json={"runtime_provider_id": "test-override", "runtime_model": "override-model"},
+        )
+        self.assertEqual(patched.status_code, 200)
+        stored = patched.json()["conversation"]
+        request = main.ChatRequest(conversation_id=stored["id"], message="主色是什么", mode="agent")
+        main.prepare_jinni_chat_payload(request, stored)
+        self.assertEqual(request.mode, "chat")
+        self.assertEqual(request.provider, "test-override")
+        self.assertEqual(request.model, "override-model")
+        self.assertIn("品牌主色是深海蓝", request.system_prompt)
+        self.assertEqual(main.enforce_jinni_agent_action(stored, "generate_image"), "chat")
+        self.assertEqual(main.enforce_jinni_agent_action(stored, "edit_image"), "chat")
+
+        too_many = dict(payload)
+        too_many["name"] = "文件过多"
+        too_many["knowledge_files"] = [
+            {"url": f"/assets/input/{i}.txt", "name": f"{i}.txt", "kind": "file"}
+            for i in range(main.JINNI_KNOWLEDGE_MAX + 1)
+        ]
+        rejected = self.client.post("/api/jinnis", headers=self.headers, json=too_many)
+        self.assertEqual(rejected.status_code, 400)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/static/images/logo.png" type="image/png">
-    <title>GPT 对话</title>
+    <title>头脑风暴</title>
     <script>
         (function(){
             try {
@@ -16,13 +16,13 @@
             } catch(e) {}
         })();
     </script>
-    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783865692"></script>
-    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783865692"></script>
-    <script src="/static/js/theme.js?v=2026.07.4.2.1783865692"></script>
-    <script src="/static/js/i18n.js?v=2026.07.4.2.1784042962"></script>
-    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783865692">
+    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1784104411"></script>
+    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
     <style>
-        @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783865692');
+        @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783154122');
         :root {
             --ease:cubic-bezier(.4,0,.2,1);
             --chat-bg:#eef2f6;
@@ -261,7 +261,24 @@
         .image-preview-modal img { max-width:min(1180px,94vw); max-height:88vh; object-fit:contain; border-radius:16px; box-shadow:0 24px 70px rgba(0,0,0,.32); background:var(--chat-panel); }
         .image-preview-close { position:fixed; top:18px; right:18px; width:36px; height:36px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:rgba(248,250,252,.92); color:#111827; border:1px solid rgba(255,255,255,.38); box-shadow:0 12px 28px rgba(0,0,0,.18); }
         .image-preview-close i,.image-preview-close svg { width:18px; height:18px; }
+        .confirm-modal { position:fixed; inset:0; z-index:10020; display:flex; align-items:center; justify-content:center; padding:22px; background:rgba(15,23,42,.58); backdrop-filter:blur(10px); }
+        .confirm-modal[hidden] { display:none; }
+        .confirm-dialog { width:min(420px,100%); padding:22px; border:1px solid var(--chat-line); border-radius:18px; background:var(--chat-panel); color:var(--chat-text); box-shadow:0 28px 80px rgba(0,0,0,.3); animation:confirmIn .18s var(--ease); }
+        .confirm-dialog-head { display:flex; align-items:flex-start; gap:13px; }
+        .confirm-dialog-icon { width:40px; height:40px; flex:0 0 40px; display:flex; align-items:center; justify-content:center; border-radius:12px; background:rgba(220,38,38,.1); color:#dc2626; }
+        .confirm-dialog-icon i,.confirm-dialog-icon svg { width:19px; height:19px; }
+        .confirm-dialog-copy { min-width:0; padding-top:1px; }
+        .confirm-dialog-title { margin:0; color:var(--chat-text); font-size:15px; line-height:1.35; font-weight:950; }
+        .confirm-dialog-message { margin:7px 0 0; color:var(--chat-muted); font-size:11px; line-height:1.65; }
+        .confirm-dialog-actions { margin-top:22px; display:flex; justify-content:flex-end; gap:8px; }
+        .confirm-dialog-actions button { height:38px; min-width:72px; padding:0 14px; border:1px solid var(--chat-line); border-radius:11px; background:var(--chat-panel-2); color:var(--chat-text); font-size:11px; font-weight:900; transition:background .16s var(--ease),border-color .16s var(--ease),transform .16s var(--ease); }
+        .confirm-dialog-actions button:hover { background:var(--chat-soft); border-color:var(--chat-line-2); }
+        .confirm-dialog-actions button:active { transform:scale(.98); }
+        .confirm-dialog-actions .danger { border-color:#dc2626; background:#dc2626; color:#fff; }
+        .confirm-dialog-actions .danger:hover { border-color:#b91c1c; background:#b91c1c; }
+        .confirm-dialog-actions button:focus-visible { outline:3px solid rgba(100,116,139,.3); outline-offset:2px; }
         @keyframes popIn { from { opacity:0; transform:translateY(-6px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+        @keyframes confirmIn { from { opacity:0; transform:translateY(8px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
         @keyframes cursorBlink { 0%,45% { opacity:1; } 46%,100% { opacity:0; } }
         html.studio-theme-dark body .chat-shell,
         body.studio-theme-dark .chat-shell,
@@ -511,6 +528,102 @@
         .run-state-message { color:var(--chat-muted); }
         @keyframes statusPulse { 50% { opacity:.35; } }
 
+        .jinni-sidebar { margin:0 8px 10px; padding:10px 4px 8px; border-top:1px solid var(--chat-line); border-bottom:1px solid var(--chat-line); }
+        .jinni-sidebar-head { height:28px; padding:0 7px; display:flex; align-items:center; gap:8px; }
+        .jinni-sidebar-title { color:var(--chat-muted); font-size:11px; font-weight:950; letter-spacing:.04em; }
+        .jinni-quick-list { display:flex; flex-direction:column; gap:2px; }
+        .jinni-quick { width:100%; min-height:36px; padding:5px 7px; display:grid; grid-template-columns:26px minmax(0,1fr); align-items:center; gap:8px; border-radius:8px; background:transparent; color:var(--chat-text); text-align:left; }
+        .jinni-quick:hover { background:var(--chat-soft); }
+        .jinni-quick-avatar,.jinni-avatar { display:flex; align-items:center; justify-content:center; overflow:hidden; background:linear-gradient(145deg,#56677d,#2f3d52); color:#fff; font-weight:950; }
+        .jinni-quick-avatar { width:26px; height:26px; border-radius:8px; font-size:12px; }
+        .jinni-quick-avatar img,.jinni-avatar img { width:100%; height:100%; object-fit:cover; }
+        .jinni-quick-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; font-weight:850; }
+        .jinni-manager-link { width:100%; height:34px; margin-top:4px; padding:0 8px; display:flex; align-items:center; gap:8px; border-radius:8px; background:transparent; color:var(--chat-muted); font-size:11px; font-weight:850; text-align:left; }
+        .jinni-manager-link:hover,.jinni-manager-link.active { background:var(--chat-soft); color:var(--chat-text); }
+        .jinni-manager-link i,.jinni-manager-link svg { width:15px; height:15px; }
+        .thread-jinni-badge { width:18px; height:18px; flex:0 0 18px; display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:6px; background:var(--chat-strong); color:var(--chat-strong-text); font-size:8px; font-weight:950; }
+        .thread-jinni-badge img { width:100%; height:100%; object-fit:cover; }
+        .thread-jinni-deleted { opacity:.5; }
+
+        .jinni-workspace { min-height:0; overflow:auto; padding:24px clamp(18px,4vw,54px) 48px; background:var(--chat-bg); }
+        .jinni-workspace[hidden] { display:none !important; }
+        .jinni-workspace-open .messages,.jinni-workspace-open .composer-wrap { display:none; }
+        .jinni-workspace-open .jinni-workspace { display:block; }
+        .jinni-hero { max-width:1180px; margin:0 auto 24px; padding:24px; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:20px; border:1px solid var(--chat-line); border-radius:20px; background:linear-gradient(135deg,var(--chat-panel),var(--chat-panel-2)); box-shadow:0 18px 42px var(--chat-shadow); }
+        .jinni-hero-kicker { color:var(--chat-muted); font-size:11px; font-weight:950; letter-spacing:.12em; text-transform:uppercase; }
+        .jinni-hero h2 { margin:6px 0 8px; color:var(--chat-text); font-size:clamp(24px,3vw,38px); line-height:1.05; letter-spacing:-.035em; }
+        .jinni-hero p { max-width:680px; margin:0; color:var(--chat-muted); font-size:13px; line-height:1.7; }
+        .jinni-primary-action { min-height:42px; padding:0 16px; display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:12px; background:var(--chat-strong); color:var(--chat-strong-text); font-size:12px; font-weight:900; box-shadow:0 10px 22px var(--chat-shadow); }
+        .jinni-primary-action:hover { transform:translateY(-1px); opacity:.94; }
+        .jinni-primary-action i,.jinni-primary-action svg { width:16px; height:16px; }
+        .jinni-manager { max-width:1180px; margin:0 auto; }
+        .jinni-manager-toolbar { margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:14px; }
+        .jinni-manager-toolbar h3 { margin:0; color:var(--chat-text); font-size:17px; font-weight:950; }
+        .jinni-search { position:relative; width:min(320px,44vw); }
+        .jinni-search i,.jinni-search svg { position:absolute; left:11px; top:50%; width:15px; height:15px; color:var(--chat-faint); transform:translateY(-50%); pointer-events:none; }
+        .jinni-search input { width:100%; height:38px; padding:0 12px 0 34px; border:1px solid var(--chat-line); border-radius:11px; outline:none; background:var(--chat-panel); color:var(--chat-text); font-size:12px; }
+        .jinni-search input:focus { border-color:var(--chat-line-2); box-shadow:0 0 0 3px var(--chat-soft); }
+        .jinni-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+        .jinni-card { min-width:0; min-height:190px; padding:16px; display:flex; flex-direction:column; border:1px solid var(--chat-line); border-radius:16px; background:var(--chat-panel); color:var(--chat-text); box-shadow:0 10px 28px var(--chat-shadow); transition:transform .18s var(--ease),border-color .18s var(--ease),box-shadow .18s var(--ease); }
+        .jinni-card:hover { transform:translateY(-2px); border-color:var(--chat-line-2); box-shadow:0 16px 36px var(--chat-shadow); }
+        .jinni-card-head { display:flex; align-items:flex-start; gap:11px; }
+        .jinni-avatar { width:44px; height:44px; flex:0 0 44px; border-radius:13px; font-size:18px; }
+        .jinni-card-heading { min-width:0; flex:1; }
+        .jinni-card-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; font-weight:950; }
+        .jinni-card-model { margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--chat-faint); font-size:10px; font-weight:800; }
+        .jinni-card-menu { width:30px; height:30px; flex:0 0 30px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:transparent; color:var(--chat-muted); }
+        .jinni-card-menu:hover { background:var(--chat-soft); color:var(--chat-text); }
+        .jinni-card-menu i,.jinni-card-menu svg { width:15px; height:15px; }
+        .jinni-card-description { min-height:42px; margin:13px 0; color:var(--chat-muted); font-size:11px; line-height:1.6; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+        .jinni-card-tags { display:flex; flex-wrap:wrap; gap:5px; }
+        .jinni-tag { padding:4px 7px; border-radius:999px; background:var(--chat-soft); color:var(--chat-muted); font-size:9px; font-weight:850; }
+        .jinni-card-actions { margin-top:auto; padding-top:14px; display:flex; gap:8px; }
+        .jinni-card-actions button { height:34px; padding:0 11px; display:flex; align-items:center; justify-content:center; gap:6px; border-radius:9px; border:1px solid var(--chat-line); background:var(--chat-panel-2); color:var(--chat-text); font-size:10px; font-weight:900; }
+        .jinni-card-actions button.primary { flex:1; border-color:var(--chat-strong); background:var(--chat-strong); color:var(--chat-strong-text); }
+        .jinni-empty { grid-column:1/-1; min-height:220px; padding:30px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; border:1px dashed var(--chat-line-2); border-radius:18px; background:var(--chat-panel); color:var(--chat-muted); text-align:center; }
+        .jinni-empty i,.jinni-empty svg { width:36px; height:36px; stroke-width:1.4; }
+        .jinni-empty strong { color:var(--chat-text); font-size:14px; }
+        .jinni-empty span { max-width:420px; font-size:11px; line-height:1.6; }
+
+        .jinni-editor { max-width:920px; margin:0 auto; }
+        .jinni-editor-head { margin-bottom:18px; display:flex; align-items:center; justify-content:space-between; gap:14px; }
+        .jinni-editor-head h2 { margin:0; color:var(--chat-text); font-size:24px; font-weight:950; letter-spacing:-.025em; }
+        .jinni-editor-actions { display:flex; gap:8px; }
+        .jinni-secondary-action,.jinni-danger-action { height:38px; padding:0 13px; border:1px solid var(--chat-line); border-radius:10px; background:var(--chat-panel); color:var(--chat-text); font-size:11px; font-weight:900; }
+        .jinni-danger-action { color:#dc2626; }
+        .jinni-form { padding:20px; display:grid; grid-template-columns:1fr 1fr; gap:16px; border:1px solid var(--chat-line); border-radius:18px; background:var(--chat-panel); box-shadow:0 12px 34px var(--chat-shadow); }
+        .jinni-field { min-width:0; display:flex; flex-direction:column; gap:7px; }
+        .jinni-field.wide { grid-column:1/-1; }
+        .jinni-field label,.jinni-section-label { color:var(--chat-text); font-size:11px; font-weight:900; }
+        .jinni-field small { color:var(--chat-faint); font-size:9px; line-height:1.5; }
+        .jinni-field input,.jinni-field textarea,.jinni-field select { width:100%; border:1px solid var(--chat-line); border-radius:10px; outline:none; background:var(--chat-bg); color:var(--chat-text); font-size:12px; }
+        .jinni-field input,.jinni-field select { height:40px; padding:0 11px; }
+        .jinni-field textarea { min-height:112px; padding:10px 11px; resize:vertical; line-height:1.6; }
+        .jinni-field input:focus,.jinni-field textarea:focus,.jinni-field select:focus { border-color:var(--chat-line-2); box-shadow:0 0 0 3px var(--chat-soft); }
+        .jinni-avatar-editor { display:flex; align-items:center; gap:12px; }
+        .jinni-avatar-editor .jinni-avatar { width:54px; height:54px; flex-basis:54px; }
+        .jinni-starter-list,.jinni-knowledge-list { display:flex; flex-direction:column; gap:7px; }
+        .jinni-starter-row,.jinni-knowledge-row { min-height:38px; display:flex; align-items:center; gap:8px; }
+        .jinni-starter-row input { flex:1; }
+        .jinni-row-remove { width:34px; height:34px; flex:0 0 34px; display:flex; align-items:center; justify-content:center; border-radius:9px; background:var(--chat-soft); color:var(--chat-muted); }
+        .jinni-row-remove:hover { color:#dc2626; }
+        .jinni-row-remove i,.jinni-row-remove svg { width:14px; height:14px; }
+        .jinni-add-row { align-self:flex-start; height:34px; padding:0 10px; display:flex; align-items:center; gap:6px; border-radius:9px; background:var(--chat-soft); color:var(--chat-text); font-size:10px; font-weight:900; }
+        .jinni-capabilities { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+        .jinni-capability { min-height:54px; padding:9px; display:flex; align-items:center; gap:8px; border:1px solid var(--chat-line); border-radius:11px; background:var(--chat-bg); color:var(--chat-text); font-size:10px; font-weight:850; }
+        .jinni-capability input { width:16px; height:16px; }
+        .jinni-knowledge-row { padding:7px 9px; border:1px solid var(--chat-line); border-radius:10px; background:var(--chat-bg); }
+        .jinni-knowledge-row i,.jinni-knowledge-row svg { width:15px; height:15px; color:var(--chat-muted); }
+        .jinni-knowledge-name { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--chat-text); font-size:10px; font-weight:850; }
+        .jinni-form-error { grid-column:1/-1; min-height:0; color:#dc2626; font-size:11px; font-weight:800; }
+        .jinni-chat-empty { margin:auto; width:min(680px,100%); display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center; }
+        .jinni-chat-empty .jinni-avatar { width:64px; height:64px; border-radius:18px; font-size:24px; }
+        .jinni-chat-empty h2 { margin:0; color:var(--chat-text); font-size:24px; font-weight:950; }
+        .jinni-chat-empty p { max-width:520px; margin:0; color:var(--chat-muted); font-size:12px; line-height:1.7; }
+        .jinni-starter-chips { margin-top:6px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; width:100%; }
+        .jinni-starter-chip { min-height:46px; padding:10px 12px; border:1px solid var(--chat-line); border-radius:12px; background:var(--chat-panel); color:var(--chat-text); font-size:11px; font-weight:800; text-align:left; }
+        .jinni-starter-chip:hover { border-color:var(--chat-line-2); background:var(--chat-soft); }
+
         html.studio-theme-dark body .conversation-sidebar,
         body.studio-theme-dark .conversation-sidebar,
         html.theme-dark body .conversation-sidebar,
@@ -529,6 +642,16 @@
             .chat-shell.sidebar-mobile-open .sidebar-backdrop { display:block; }
             .sidebar-open-btn,.sidebar-collapsed .sidebar-open-btn { display:flex; }
             .conversation-sidebar-head { height:62px; }
+            .jinni-workspace { padding:16px 14px 36px; }
+            .jinni-hero { padding:18px; grid-template-columns:1fr; }
+            .jinni-grid { grid-template-columns:1fr; }
+            .jinni-manager-toolbar { align-items:stretch; flex-direction:column; }
+            .jinni-search { width:100%; }
+            .jinni-form { padding:14px; grid-template-columns:1fr; }
+            .jinni-field.wide { grid-column:1; }
+            .jinni-capabilities { grid-template-columns:1fr; }
+            .jinni-starter-chips { grid-template-columns:1fr; }
+            .jinni-editor-head { align-items:flex-start; flex-direction:column; }
         }
     </style>
 </head>
@@ -536,14 +659,21 @@
     <div id="chatShell" class="chat-shell">
         <aside id="conversationSidebar" class="conversation-sidebar" aria-label="会话列表">
             <div class="conversation-sidebar-head">
-                <div class="conversation-sidebar-title">GPT 对话</div>
+                <div class="conversation-sidebar-title">头脑风暴</div>
                 <button type="button" class="sidebar-icon-btn" onclick="toggleConversationSidebar(false)" title="收起会话栏" aria-label="收起会话栏"><i data-lucide="panel-left-close"></i></button>
             </div>
-            <button type="button" class="sidebar-primary" onclick="newConversation()"><i data-lucide="square-pen"></i><span>新聊天</span></button>
+            <button type="button" class="sidebar-primary" onclick="newConversation()"><i data-lucide="square-pen"></i><span>发起新聊天</span></button>
             <label class="conversation-search" aria-label="搜索对话">
                 <i data-lucide="search"></i>
                 <input id="conversationSearch" type="search" placeholder="搜索对话" oninput="handleConversationSearch(this.value)">
             </label>
+            <section class="jinni-sidebar" aria-label="Jinni 智能体">
+                <div class="jinni-sidebar-head">
+                    <span class="jinni-sidebar-title">Jinni</span>
+                </div>
+                <div id="jinniQuickList" class="jinni-quick-list"></div>
+                <button id="jinniManagerLink" type="button" class="jinni-manager-link" onclick="showJinniManager()"><i data-lucide="sparkles"></i><span>Jinni 管理器</span></button>
+            </section>
             <div id="threadList" class="thread-list"></div>
         </aside>
         <button type="button" class="sidebar-backdrop" onclick="toggleConversationSidebar(false)" aria-label="关闭会话栏"></button>
@@ -558,7 +688,7 @@
                     </div>
                     <div class="top-actions">
                         <button onclick="event.stopPropagation();newConversation()" class="action-btn" title="新建对话" data-i18n-title="chat.newConversation"><i data-lucide="plus"></i><span data-i18n="chat.new">新建</span></button>
-                        <button onclick="event.stopPropagation();toggleSystemPrompt()" class="action-btn" title="系统提示词"><i data-lucide="sliders-horizontal"></i><span>系统</span></button>
+                        <button id="systemPromptBtn" onclick="event.stopPropagation();toggleSystemPrompt()" class="action-btn" title="系统提示词"><i data-lucide="sliders-horizontal"></i><span>系统</span></button>
                         <aside id="systemPromptPopover" class="system-prompt-popover" onclick="event.stopPropagation()">
                             <div class="system-prompt-head">
                                 <div class="system-prompt-title">系统提示词</div>
@@ -573,6 +703,8 @@
                     </div>
                 </div>
             </header>
+
+            <section id="jinniWorkspace" class="jinni-workspace" hidden></section>
 
             <section id="messages" class="messages"></section>
 
@@ -679,6 +811,21 @@
         <button class="image-preview-close" title="关闭" aria-label="关闭" onclick="event.stopPropagation();closeImagePreview()"><i data-lucide="x"></i></button>
         <img id="imagePreviewImg" src="" alt="preview" onclick="event.stopPropagation()">
     </div>
+    <div id="confirmModal" class="confirm-modal" hidden onclick="if(event.target===this) resolveConfirmDialog(false)">
+        <section class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage" onclick="event.stopPropagation()">
+            <div class="confirm-dialog-head">
+                <div class="confirm-dialog-icon"><i data-lucide="trash-2"></i></div>
+                <div class="confirm-dialog-copy">
+                    <h2 id="confirmDialogTitle" class="confirm-dialog-title">确认删除？</h2>
+                    <p id="confirmDialogMessage" class="confirm-dialog-message"></p>
+                </div>
+            </div>
+            <div class="confirm-dialog-actions">
+                <button id="confirmDialogCancel" type="button" onclick="resolveConfirmDialog(false)">取消</button>
+                <button id="confirmDialogAccept" type="button" class="danger" onclick="resolveConfirmDialog(true)">确认删除</button>
+            </div>
+        </section>
+    </div>
 
     <script>
         lucide.createIcons();
@@ -686,6 +833,30 @@
         function defaultTitle(){ return tr('chat.newConversation'); }
         function setChatTitle(title){
             document.getElementById('chatTitle').textContent = title || defaultTitle();
+        }
+        let confirmDialogResolver = null;
+        let confirmDialogPreviousFocus = null;
+        function showConfirmDialog({title='确认操作？',message='',confirmText='确认',cancelText='取消'}={}){
+            if(confirmDialogResolver) resolveConfirmDialog(false);
+            const modal = document.getElementById('confirmModal');
+            confirmDialogPreviousFocus = document.activeElement;
+            document.getElementById('confirmDialogTitle').textContent = title;
+            document.getElementById('confirmDialogMessage').textContent = message;
+            document.getElementById('confirmDialogAccept').textContent = confirmText;
+            document.getElementById('confirmDialogCancel').textContent = cancelText;
+            modal.hidden = false;
+            requestAnimationFrame(() => document.getElementById('confirmDialogCancel')?.focus());
+            return new Promise(resolve => { confirmDialogResolver = resolve; });
+        }
+        function resolveConfirmDialog(accepted=false){
+            if(!confirmDialogResolver) return;
+            const resolve = confirmDialogResolver;
+            const previousFocus = confirmDialogPreviousFocus;
+            confirmDialogResolver = null;
+            confirmDialogPreviousFocus = null;
+            document.getElementById('confirmModal').hidden = true;
+            resolve(!!accepted);
+            requestAnimationFrame(() => previousFocus?.isConnected && previousFocus.focus());
         }
         function applyLanguage(lang){
             if(lang && window.StudioI18n) StudioI18n.set(lang);
@@ -759,6 +930,12 @@
         let resolutionPickerHome = null;
         let refs = [];
         let config = { chat_model: 'gpt-5.5', image_model: 'gpt-image-2', ms_chat_models: [] };
+        let jinnis = [];
+        let jinniWorkspaceMode = 'chat';
+        let editingJinni = null;
+        let editingKnowledgeFiles = [];
+        let jinniSearchTimer = null;
+        let conversationTransitioning = false;
 
         const SIZE_OPTIONS = {
             square: [['1024x1024','1k'], ['1536x1536','2k'], ['2048x2048','4k']],
@@ -771,6 +948,377 @@
         };
 
         const headers = () => ({'Content-Type':'application/json', 'X-User-ID':userId});
+
+        function currentJinniSnapshot(){
+            return isObject(currentConversation?.jinni_snapshot) ? currentConversation.jinni_snapshot : null;
+        }
+
+        function jinniAvatarMarkup(jinni, className='jinni-avatar'){
+            const avatar = String(jinni?.avatar_url || '').trim();
+            const fallback = escapeHtml(String(jinni?.name || 'J').trim().slice(0,1).toUpperCase() || 'J');
+            return `<span class="${className}">${avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : fallback}</span>`;
+        }
+
+        function updateWorkspaceChrome(){
+            const shell = document.getElementById('chatShell');
+            const workspace = document.getElementById('jinniWorkspace');
+            const managerLink = document.getElementById('jinniManagerLink');
+            const systemButton = document.getElementById('systemPromptBtn');
+            const inManager = jinniWorkspaceMode !== 'chat';
+            shell?.classList.toggle('jinni-workspace-open', inManager);
+            if(workspace) workspace.hidden = !inManager;
+            managerLink?.classList.toggle('active', inManager);
+            if(systemButton){
+                const locked = inManager || !!currentJinniSnapshot();
+                systemButton.disabled = locked;
+                systemButton.title = locked ? 'Jinni 指令请在 Jinni 管理器中编辑' : '系统提示词';
+                systemButton.style.opacity = locked ? '.48' : '';
+            }
+        }
+
+        function showChatWorkspace(){
+            jinniWorkspaceMode = 'chat';
+            updateWorkspaceChrome();
+        }
+
+        function showJinniManager(){
+            jinniWorkspaceMode = 'manager';
+            setChatTitle('Jinni 管理器');
+            updateWorkspaceChrome();
+            renderJinniManager();
+            if(window.innerWidth <= 900) toggleConversationSidebar(false);
+        }
+
+        async function loadJinnis(query=''){
+            try {
+                const response = await fetch(`/api/jinnis?q=${encodeURIComponent(query)}`, {headers:{'X-User-ID':userId}});
+                const data = await response.json();
+                if(!response.ok) throw new Error(response.status === 404 ? '后端尚未加载 Jinni 功能，请重启本地服务后重试。' : (data.detail || '加载 Jinni 失败'));
+                jinnis = data.jinnis || [];
+                renderJinniQuickList();
+                if(jinniWorkspaceMode === 'manager') renderJinniManager();
+            } catch(e) {
+                if(jinniWorkspaceMode === 'manager') renderJinniManager(e.message || '加载 Jinni 失败');
+            }
+        }
+
+        function renderJinniQuickList(){
+            const list = document.getElementById('jinniQuickList');
+            if(!list) return;
+            list.innerHTML = jinnis.slice(0,4).map(item => `
+                <button type="button" class="jinni-quick" onclick="startJinniConversation('${escapeHtml(item.id)}')" title="使用 ${escapeHtml(item.name)} 发起新聊天">
+                    ${jinniAvatarMarkup(item,'jinni-quick-avatar')}
+                    <span class="jinni-quick-name">${escapeHtml(item.name)}</span>
+                </button>`).join('');
+            lucide.createIcons();
+        }
+
+        function jinniCapabilityTags(item){
+            const tags = ['聊天'];
+            if(item.capabilities?.generate_image) tags.push('生图');
+            if(item.capabilities?.edit_image) tags.push('改图');
+            if(item.knowledge_files?.length) tags.push(`${item.knowledge_files.length} 份知识`);
+            return tags.map(tag => `<span class="jinni-tag">${escapeHtml(tag)}</span>`).join('');
+        }
+
+        function renderJinniManager(error=''){
+            const workspace = document.getElementById('jinniWorkspace');
+            if(!workspace || jinniWorkspaceMode !== 'manager') return;
+            const cards = error
+                ? `<div class="jinni-empty"><i data-lucide="circle-alert"></i><strong>暂时无法加载 Jinni</strong><span>${escapeHtml(error)}</span></div>`
+                : jinnis.length ? jinnis.map(item => `
+                    <article class="jinni-card">
+                        <div class="jinni-card-head">
+                            ${jinniAvatarMarkup(item)}
+                            <div class="jinni-card-heading">
+                                <div class="jinni-card-name">${escapeHtml(item.name)}</div>
+                                <div class="jinni-card-model">${escapeHtml(shortModelName(item.chat_model || '自动选择模型'))}</div>
+                            </div>
+                            <button type="button" class="jinni-card-menu" onclick="openJinniEditor('${escapeHtml(item.id)}')" title="编辑 Jinni" aria-label="编辑 Jinni"><i data-lucide="pencil"></i></button>
+                        </div>
+                        <div class="jinni-card-description">${escapeHtml(item.description || '这个 Jinni 还没有简介。')}</div>
+                        <div class="jinni-card-tags">${jinniCapabilityTags(item)}</div>
+                        <div class="jinni-card-actions">
+                            <button type="button" class="primary" onclick="startJinniConversation('${escapeHtml(item.id)}')"><i data-lucide="message-square-plus"></i><span>发起聊天</span></button>
+                            <button type="button" onclick="openJinniEditor('${escapeHtml(item.id)}')">编辑</button>
+                        </div>
+                    </article>`).join('')
+                : `<div class="jinni-empty"><i data-lucide="sparkles"></i><strong>创建你的第一个 Jinni</strong><span>为重复任务保存专属指令、知识文件和模型能力，之后随时从这里发起新聊天。</span><button type="button" class="jinni-primary-action" onclick="openJinniEditor()"><i data-lucide="plus"></i><span>新建 Jinni</span></button></div>`;
+            workspace.innerHTML = `
+                <div class="jinni-hero">
+                    <div><div class="jinni-hero-kicker">Personal AI workspace</div><h2>构建你的 Jinni</h2><p>把常用角色、工作方法和知识资料保存成专属智能体。每次从 Jinni 发起聊天时，都会冻结一份独立配置快照。</p></div>
+                    <button type="button" class="jinni-primary-action" onclick="openJinniEditor()"><i data-lucide="plus"></i><span>新建 Jinni</span></button>
+                </div>
+                <div class="jinni-manager">
+                    <div class="jinni-manager-toolbar"><h3>我的 Jinni</h3><label class="jinni-search"><i data-lucide="search"></i><input type="search" placeholder="搜索 Jinni" oninput="handleJinniSearch(this.value)"></label></div>
+                    <div class="jinni-grid">${cards}</div>
+                </div>`;
+            lucide.createIcons();
+        }
+
+        function handleJinniSearch(value){
+            if(jinniSearchTimer) clearTimeout(jinniSearchTimer);
+            jinniSearchTimer = setTimeout(() => loadJinnis(String(value || '').trim()), 220);
+        }
+
+        function jinniProviderOptions(kind, selected){
+            const items = kind === 'image' ? imageProviders() : chatProviders();
+            return items.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === selected ? 'selected' : ''}>${escapeHtml(item.name || item.id)}</option>`).join('');
+        }
+
+        function jinniModelOptions(kind, providerId, selected){
+            const models = uniqueModels(providerById(providerId, kind)?.[kind === 'image' ? 'image_models' : 'chat_models'] || []);
+            return models.map(model => `<option value="${escapeHtml(model)}" ${model === selected ? 'selected' : ''}>${escapeHtml(shortModelName(model))}</option>`).join('');
+        }
+
+        function openJinniEditor(id=''){
+            const source = id ? jinnis.find(item => item.id === id) : null;
+            const defaultChatProvider = source?.provider_id || chatProviders()[0]?.id || 'comfly';
+            const defaultImageProvider = source?.image_provider_id || imageProviders()[0]?.id || defaultChatProvider;
+            editingJinni = source ? JSON.parse(JSON.stringify(source)) : {
+                name:'', avatar_url:'', description:'', instructions:'', starters:[''],
+                provider_id:defaultChatProvider,
+                chat_model:chatProviders().find(item => item.id === defaultChatProvider)?.chat_models?.[0] || config.chat_model || '',
+                image_provider_id:defaultImageProvider,
+                image_model:imageProviders().find(item => item.id === defaultImageProvider)?.image_models?.[0] || config.image_model || '',
+                capabilities:{chat:true,generate_image:false,edit_image:false}, knowledge_files:[]
+            };
+            editingKnowledgeFiles = [...(editingJinni.knowledge_files || [])];
+            jinniWorkspaceMode = 'editor';
+            setChatTitle(id ? `编辑 ${source.name}` : '新建 Jinni');
+            updateWorkspaceChrome();
+            renderJinniEditor();
+            if(window.innerWidth <= 900) toggleConversationSidebar(false);
+        }
+
+        function renderJinniEditor(){
+            const workspace = document.getElementById('jinniWorkspace');
+            if(!workspace || !editingJinni || jinniWorkspaceMode !== 'editor') return;
+            const starters = (editingJinni.starters?.length ? editingJinni.starters : ['']).slice(0,6);
+            workspace.innerHTML = `<div class="jinni-editor">
+                <div class="jinni-editor-head"><h2>${editingJinni.id ? '编辑 Jinni' : '新建 Jinni'}</h2><div class="jinni-editor-actions">${editingJinni.id ? '<button type="button" class="jinni-danger-action" onclick="deleteEditingJinni()">删除</button>' : ''}<button type="button" class="jinni-secondary-action" onclick="showJinniManager()">取消</button><button type="button" class="jinni-primary-action" onclick="saveJinni()"><i data-lucide="save"></i><span>保存 Jinni</span></button></div></div>
+                <form id="jinniForm" class="jinni-form" onsubmit="event.preventDefault();saveJinni()">
+                    <div class="jinni-field wide"><label>头像</label><div class="jinni-avatar-editor">${jinniAvatarMarkup(editingJinni)}<div><input id="jinniAvatarInput" type="file" accept="image/*" hidden onchange="uploadJinniAvatar(this.files)"><button type="button" class="jinni-add-row" onclick="document.getElementById('jinniAvatarInput').click()"><i data-lucide="upload"></i><span>上传头像</span></button><small>支持 PNG、JPG、WebP，使用方形图片效果最佳。</small></div></div></div>
+                    <div class="jinni-field"><label for="jinniName">名称</label><input id="jinniName" maxlength="80" required value="${escapeHtml(editingJinni.name || '')}" placeholder="例如：品牌创意导演"></div>
+                    <div class="jinni-field"><label for="jinniDescription">简介</label><input id="jinniDescription" maxlength="300" value="${escapeHtml(editingJinni.description || '')}" placeholder="一句话说明它擅长什么"></div>
+                    <div class="jinni-field wide"><label for="jinniInstructions">Jinni 指令</label><textarea id="jinniInstructions" maxlength="20000" required placeholder="定义角色、目标、工作方法、输出格式和边界。">${escapeHtml(editingJinni.instructions || '')}</textarea><small>该指令在聊天中锁定；编辑后只对新会话生效。</small></div>
+                    <div class="jinni-field wide"><label>对话开场白</label><div id="jinniStarterList" class="jinni-starter-list">${starters.map((value,index) => `<div class="jinni-starter-row"><input maxlength="200" value="${escapeHtml(value)}" placeholder="建议用户可以这样开始"><button type="button" class="jinni-row-remove" onclick="removeJinniStarter(${index})" aria-label="删除开场白"><i data-lucide="x"></i></button></div>`).join('')}</div><button type="button" class="jinni-add-row" onclick="addJinniStarter()"><i data-lucide="plus"></i><span>添加开场白</span></button></div>
+                    <div class="jinni-field"><label for="jinniProvider">对话平台</label><select id="jinniProvider" onchange="refreshJinniChatModels()">${jinniProviderOptions('chat',editingJinni.provider_id)}</select></div>
+                    <div class="jinni-field"><label for="jinniChatModel">默认对话模型</label><select id="jinniChatModel">${jinniModelOptions('chat',editingJinni.provider_id,editingJinni.chat_model)}</select></div>
+                    <div class="jinni-field"><label for="jinniImageProvider">图像平台</label><select id="jinniImageProvider" onchange="refreshJinniImageModels()">${jinniProviderOptions('image',editingJinni.image_provider_id)}</select></div>
+                    <div class="jinni-field"><label for="jinniImageModel">默认图像模型</label><select id="jinniImageModel">${jinniModelOptions('image',editingJinni.image_provider_id,editingJinni.image_model)}</select></div>
+                    <div class="jinni-field wide"><span class="jinni-section-label">能力</span><div class="jinni-capabilities"><label class="jinni-capability"><input type="checkbox" checked disabled><span>聊天</span></label><label class="jinni-capability"><input id="jinniCanGenerate" type="checkbox" ${editingJinni.capabilities?.generate_image ? 'checked' : ''}><span>生成图片</span></label><label class="jinni-capability"><input id="jinniCanEdit" type="checkbox" ${editingJinni.capabilities?.edit_image ? 'checked' : ''}><span>编辑图片</span></label></div></div>
+                    <div class="jinni-field wide"><label>知识文件</label><div id="jinniKnowledgeList" class="jinni-knowledge-list">${renderEditingKnowledge()}</div><input id="jinniKnowledgeInput" type="file" multiple hidden accept=".pdf,.txt,.md,.markdown,.json,.csv,.log,.py,.js,.ts,.tsx,.jsx,.html,.css,.xml,.yaml,.yml,.docx,.xlsx" onchange="uploadJinniKnowledge(this.files);this.value='' "><button type="button" class="jinni-add-row" onclick="document.getElementById('jinniKnowledgeInput').click()"><i data-lucide="paperclip"></i><span>添加知识文件</span></button><small>最多 20 份、单份不超过 50MB；旧版 DOC/XLS 和 ZIP 请先转换格式。</small></div>
+                    <div id="jinniFormError" class="jinni-form-error"></div>
+                </form>
+            </div>`;
+            lucide.createIcons();
+        }
+
+        function renderEditingKnowledge(){
+            return editingKnowledgeFiles.length ? editingKnowledgeFiles.map((ref,index) => `<div class="jinni-knowledge-row"><i data-lucide="file-text"></i><span class="jinni-knowledge-name" title="${escapeHtml(attachmentName(ref))}">${escapeHtml(attachmentName(ref))}</span><button type="button" class="jinni-row-remove" onclick="removeJinniKnowledge(${index})" aria-label="删除知识文件"><i data-lucide="x"></i></button></div>`).join('') : '<div class="thread-empty">还没有知识文件</div>';
+        }
+
+        function collectJinniDraft(){
+            return {
+                name:document.getElementById('jinniName')?.value.trim() || '',
+                avatar_url:editingJinni?.avatar_url || '',
+                description:document.getElementById('jinniDescription')?.value.trim() || '',
+                instructions:document.getElementById('jinniInstructions')?.value.trim() || '',
+                starters:[...document.querySelectorAll('#jinniStarterList input')].map(input => input.value.trim()).filter(Boolean).slice(0,6),
+                provider_id:document.getElementById('jinniProvider')?.value || '',
+                chat_model:document.getElementById('jinniChatModel')?.value || '',
+                image_provider_id:document.getElementById('jinniImageProvider')?.value || '',
+                image_model:document.getElementById('jinniImageModel')?.value || '',
+                capabilities:{chat:true,generate_image:!!document.getElementById('jinniCanGenerate')?.checked,edit_image:!!document.getElementById('jinniCanEdit')?.checked},
+                knowledge_files:editingKnowledgeFiles,
+            };
+        }
+
+        function setJinniFormError(message=''){
+            const node = document.getElementById('jinniFormError');
+            if(node) node.textContent = message;
+        }
+
+        async function saveJinni(){
+            const draft = collectJinniDraft();
+            if(!draft.name || !draft.instructions){ setJinniFormError('请填写 Jinni 名称和指令。'); return; }
+            setJinniFormError('');
+            try {
+                const id = editingJinni?.id;
+                const response = await fetch(id ? `/api/jinnis/${id}` : '/api/jinnis', {method:id ? 'PATCH' : 'POST',headers:headers(),body:JSON.stringify(draft)});
+                const data = await response.json();
+                if(!response.ok) throw new Error(response.status === 404 ? '后端尚未加载 Jinni 功能，请重启本地服务后重试。' : (data.detail || '保存 Jinni 失败'));
+                await loadJinnis();
+                showJinniManager();
+            } catch(e) { setJinniFormError(e.message || '保存 Jinni 失败'); }
+        }
+
+        async function deleteEditingJinni(){
+            if(!editingJinni?.id) return;
+            const accepted = await showConfirmDialog({
+                title:`删除 Jinni「${editingJinni.name}」？`,
+                message:'删除后将无法再从管理器使用这个 Jinni，但已有历史会话及其配置快照会继续保留。',
+                confirmText:'删除 Jinni',
+            });
+            if(!accepted) return;
+            const response = await fetch(`/api/jinnis/${editingJinni.id}`, {method:'DELETE',headers:{'X-User-ID':userId}});
+            const data = await response.json();
+            if(!response.ok){ setJinniFormError(data.detail || '删除 Jinni 失败'); return; }
+            await Promise.all([loadJinnis(),loadConversations()]);
+            showJinniManager();
+        }
+
+        function addJinniStarter(){
+            const draft = collectJinniDraft();
+            if(draft.starters.length >= 6) return;
+            editingJinni = {...editingJinni,...draft,starters:[...draft.starters,'']};
+            renderJinniEditor();
+        }
+
+        function removeJinniStarter(index){
+            const values = [...document.querySelectorAll('#jinniStarterList input')].map(input => input.value);
+            values.splice(index,1);
+            editingJinni = {...editingJinni,...collectJinniDraft(),starters:values.length ? values : ['']};
+            renderJinniEditor();
+        }
+
+        function removeJinniKnowledge(index){
+            editingJinni = {...editingJinni,...collectJinniDraft()};
+            editingKnowledgeFiles.splice(index,1);
+            renderJinniEditor();
+        }
+
+        async function uploadJinniFiles(files, avatar=false){
+            if(!files?.length) return [];
+            const form = new FormData();
+            [...files].forEach(file => form.append('files',file));
+            const response = await fetch('/api/ai/upload',{method:'POST',body:form});
+            const data = await response.json();
+            if(!response.ok) throw new Error(data.detail || '上传失败');
+            return data.files || [];
+        }
+
+        async function uploadJinniAvatar(files){
+            try {
+                editingJinni = {...editingJinni,...collectJinniDraft()};
+                const uploaded = await uploadJinniFiles([...files].slice(0,1),true);
+                if(uploaded[0]) editingJinni.avatar_url = uploaded[0].url;
+                renderJinniEditor();
+            } catch(e) { setJinniFormError(e.message || '头像上传失败'); }
+        }
+
+        async function uploadJinniKnowledge(files){
+            const selected = [...(files || [])];
+            if(editingKnowledgeFiles.length + selected.length > 20){ setJinniFormError('每个 Jinni 最多保存 20 份知识文件。'); return; }
+            const unsupported = selected.find(file => !/\.(pdf|txt|md|markdown|json|csv|log|py|js|ts|tsx|jsx|html|css|xml|ya?ml|docx|xlsx)$/i.test(file.name));
+            if(unsupported){ setJinniFormError(`${unsupported.name} 格式不受支持，请先转换格式。`); return; }
+            try {
+                editingJinni = {...editingJinni,...collectJinniDraft()};
+                editingKnowledgeFiles.push(...await uploadJinniFiles(selected));
+                renderJinniEditor();
+            } catch(e) { setJinniFormError(e.message || '知识文件上传失败'); }
+        }
+
+        function refreshJinniChatModels(){
+            const select = document.getElementById('jinniChatModel');
+            const providerId = document.getElementById('jinniProvider')?.value || '';
+            if(select) select.innerHTML = jinniModelOptions('chat',providerId,'');
+        }
+
+        function refreshJinniImageModels(){
+            const select = document.getElementById('jinniImageModel');
+            const providerId = document.getElementById('jinniImageProvider')?.value || '';
+            if(select) select.innerHTML = jinniModelOptions('image',providerId,'');
+        }
+
+        function isPristineConversation(conversation=currentConversation){
+            if(!conversation?.id || (conversation.messages || []).length) return false;
+            const run = latestRunForConversation(conversation.id);
+            return !run || !['queued','running'].includes(run.status);
+        }
+
+        async function discardPristineConversation(){
+            if(!isPristineConversation()) return false;
+            const id = currentConversation.id;
+            const response = await fetch(`/api/conversations/${id}`, {method:'DELETE',headers:{'X-User-ID':userId}});
+            if(!response.ok){
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.detail || '无法复用当前空白会话');
+            }
+            conversations = conversations.filter(item => item.id !== id);
+            [...runStates.values()].filter(run => run.conversation_id === id).forEach(run => runStates.delete(run.id));
+            currentConversation = null;
+            rememberConversation('');
+            renderThreads();
+            return true;
+        }
+
+        async function startJinniConversation(id){
+            if(conversationTransitioning) return;
+            conversationTransitioning = true;
+            try {
+                const currentSnapshot = currentJinniSnapshot();
+                if(isPristineConversation() && currentSnapshot?.id === id){
+                    applyConversationRuntimeSettings();
+                    showChatWorkspace();
+                    setChatTitle(currentConversation.title || currentSnapshot.name);
+                    renderMessages([]);
+                    if(window.innerWidth <= 900) toggleConversationSidebar(false);
+                    return;
+                }
+                if(isPristineConversation()) await discardPristineConversation();
+                const response = await fetch(`/api/jinnis/${id}/conversations`,{method:'POST',headers:{'X-User-ID':userId}});
+                const data = await response.json();
+                if(!response.ok) throw new Error(data.detail || '无法发起 Jinni 聊天');
+                currentConversation = data.conversation;
+                rememberConversation(currentConversation.id);
+                applyConversationRuntimeSettings();
+                showChatWorkspace();
+                setChatTitle(currentConversation.title);
+                lastRenderedRunSignature = '';
+                renderMessages([]);
+                await Promise.all([loadConversations(),loadJinnis()]);
+                if(window.innerWidth <= 900) toggleConversationSidebar(false);
+            } catch(e) { alert(e.message || '无法发起 Jinni 聊天'); }
+            finally { conversationTransitioning = false; }
+        }
+
+        function applyConversationRuntimeSettings(){
+            const snapshot = currentJinniSnapshot();
+            if(snapshot){
+                provider = currentConversation.runtime_provider_id || snapshot.provider_id || provider;
+                activeChatModel = currentConversation.runtime_model || snapshot.chat_model || activeChatModel;
+                chatProviderModels[provider] = activeChatModel;
+                activeImageProvider = snapshot.image_provider_id || activeImageProvider;
+                activeImageModel = snapshot.image_model || activeImageModel;
+                mode = snapshot.capabilities?.generate_image || snapshot.capabilities?.edit_image ? 'agent' : 'chat';
+            }
+            setMode(mode,false);
+            updateWorkspaceChrome();
+            updateModelLabel();
+        }
+
+        function restoreGlobalChatSettings(){
+            const saved = readChatSettings();
+            provider = saved.provider || provider || 'comfly';
+            activeChatModel = saved.activeChatModel || activeChatModel || config.chat_model;
+            activeImageProvider = saved.activeImageProvider || activeImageProvider || 'comfly';
+            activeImageModel = saved.activeImageModel || activeImageModel || config.image_model;
+            mode = ['agent','chat','image'].includes(saved.mode) ? saved.mode : 'agent';
+            validateSavedProviderState();
+            setMode(mode,false);
+            updateWorkspaceChrome();
+        }
+
+        async function persistJinniRuntimeModel(){
+            if(!currentConversation?.id || !currentJinniSnapshot()) return;
+            try {
+                const response = await fetch(`/api/conversations/${currentConversation.id}`,{method:'PATCH',headers:headers(),body:JSON.stringify({runtime_provider_id:provider,runtime_model:activeChatModel})});
+                const data = await response.json();
+                if(response.ok) currentConversation = data.conversation;
+            } catch(e) {}
+        }
 
         function rememberConversation(id){
             try {
@@ -836,6 +1384,7 @@
         }
 
         function currentSystemPrompt(){
+            if(currentJinniSnapshot()) return '';
             const pop = document.getElementById('systemPromptPopover');
             const input = document.getElementById('systemPromptInput');
             const value = pop?.classList.contains('open') && input ? input.value : systemPrompt;
@@ -860,6 +1409,7 @@
             return list.find(p => p.id === id) || list[0];
         }
         function activePickerKind(){
+            if(currentJinniSnapshot()) return 'chat';
             return mode === 'image' ? 'image' : (mode === 'agent' ? modelPickerScope : 'chat');
         }
         function currentProviderId(kind=activePickerKind()){
@@ -951,7 +1501,8 @@
             }
             renderProviderControls();
             updateModelLabel();
-            saveChatSettings();
+            if(!currentJinniSnapshot()) saveChatSettings();
+            if(kind === 'chat') persistJinniRuntimeModel();
         }
         function setActiveModel(model, kind=activePickerKind()){
             if(kind === 'image') activeImageModel = model;
@@ -962,7 +1513,8 @@
             }
             renderProviderControls();
             updateModelLabel();
-            saveChatSettings();
+            if(!currentJinniSnapshot()) saveChatSettings();
+            if(kind === 'chat') persistJinniRuntimeModel();
         }
 
         function toggleModelPicker(force){
@@ -1094,16 +1646,18 @@
             const currentPid = currentProviderId(kind);
             const currentMdl = currentModel(kind);
             providerLabel.textContent = providerNameById(currentPid, kind);
-            if(mode === 'agent') {
+            if(currentJinniSnapshot()) {
+                modelLabel.textContent = shortModelName(activeChatModel);
+            } else if(mode === 'agent') {
                 modelLabel.textContent = `${shortModelName(activeChatModel)} + ${shortModelName(activeImageModel)}`;
             } else {
                 modelLabel.textContent = shortModelName(currentMdl);
             }
-            title.textContent = mode === 'agent' ? '智能助手模型' : (kind === 'image' ? '生图模型' : '对话模型');
-            scope.innerHTML = mode === 'agent'
+            title.textContent = currentJinniSnapshot() ? '当前会话模型' : (mode === 'agent' ? '智能助手模型' : (kind === 'image' ? '生图模型' : '对话模型'));
+            scope.innerHTML = mode === 'agent' && !currentJinniSnapshot()
                 ? `<button class="${kind === 'chat' ? 'active' : ''}" onclick="setModelPickerScope('chat')">对话</button><button class="${kind === 'image' ? 'active' : ''}" onclick="setModelPickerScope('image')">图像</button>`
                 : '';
-            scope.style.display = mode === 'agent' ? 'flex' : 'none';
+            scope.style.display = mode === 'agent' && !currentJinniSnapshot() ? 'flex' : 'none';
             const providers = kind === 'image' ? imageProviders() : chatProviders();
             providerList.innerHTML = providers.length
                 ? providers.map(p => `<button class="model-picker-option ${p.id === currentPid ? 'active' : ''}" onclick="setProvider('${escapeHtml(p.id)}','${kind}')"><span>${escapeHtml(p.name || p.id)}</span>${p.id === currentPid ? '<i data-lucide="check"></i>' : ''}</button>`).join('')
@@ -1174,7 +1728,8 @@
                     btn.type = 'button';
                     btn.className = `thread-item ${currentConversation?.id === item.id ? 'active' : ''}`;
                     btn.onclick = () => openConversation(item.id, true);
-                    btn.innerHTML = `<div class="thread-title-line">${status && runStatusClass(status) ? `<span class="thread-status-dot ${runStatusClass(status)}"></span>` : ''}<span class="thread-title-text">${escapeHtml(item.title || defaultTitle())}</span></div><div class="thread-preview">${escapeHtml(status && runStatusLabel(status) || item.last_message || '空对话')}</div>`;
+                    const jinniBadge = item.jinni ? `<span class="thread-jinni-badge ${item.jinni.deleted ? 'thread-jinni-deleted' : ''}" title="${item.jinni.deleted ? '原 Jinni 已删除，当前会话使用配置快照' : escapeHtml(item.jinni.name)}">${item.jinni.avatar_url ? `<img src="${escapeHtml(item.jinni.avatar_url)}" alt="">` : escapeHtml(String(item.jinni.name || 'J').slice(0,1))}</span>` : '';
+                    btn.innerHTML = `<div class="thread-title-line">${status && runStatusClass(status) ? `<span class="thread-status-dot ${runStatusClass(status)}"></span>` : ''}${jinniBadge}<span class="thread-title-text">${escapeHtml(item.title || defaultTitle())}</span></div><div class="thread-preview">${escapeHtml(status && runStatusLabel(status) || item.last_message || (item.jinni ? `使用 ${item.jinni.name}` : '空对话'))}</div>`;
                     const menuButton = document.createElement('button');
                     menuButton.type = 'button';
                     menuButton.className = 'thread-menu-button';
@@ -1281,23 +1836,47 @@
         }
 
         async function newConversation(){
-            conversationSearch = '';
-            const searchInput = document.getElementById('conversationSearch');
-            if(searchInput) searchInput.value = '';
-            const data = await fetch('/api/conversations', {method:'POST', headers:headers(), body:JSON.stringify({title:'新对话'})}).then(r=>r.json());
-            currentConversation = data.conversation;
-            rememberConversation(currentConversation.id);
-            setChatTitle(currentConversation.title);
-            lastRenderedRunSignature = '';
-            renderMessages([]);
-            await loadConversations();
-            if(window.innerWidth <= 900) toggleConversationSidebar(false);
+            if(conversationTransitioning) return;
+            conversationTransitioning = true;
+            try {
+                const reuseCurrent = isPristineConversation() && !currentJinniSnapshot();
+                if(isPristineConversation() && currentJinniSnapshot()) await discardPristineConversation();
+                restoreGlobalChatSettings();
+                showChatWorkspace();
+                conversationSearch = '';
+                const searchInput = document.getElementById('conversationSearch');
+                if(searchInput) searchInput.value = '';
+                if(reuseCurrent){
+                    setChatTitle(currentConversation.title || '新对话');
+                    lastRenderedRunSignature = '';
+                    renderMessages([]);
+                    renderThreads();
+                    if(window.innerWidth <= 900) toggleConversationSidebar(false);
+                    return;
+                }
+                const response = await fetch('/api/conversations', {method:'POST', headers:headers(), body:JSON.stringify({title:'新对话'})});
+                const data = await response.json();
+                if(!response.ok) throw new Error(data.detail || '无法发起新聊天');
+                currentConversation = data.conversation;
+                setMode(mode,false);
+                updateWorkspaceChrome();
+                rememberConversation(currentConversation.id);
+                setChatTitle(currentConversation.title);
+                lastRenderedRunSignature = '';
+                renderMessages([]);
+                await loadConversations();
+                if(window.innerWidth <= 900) toggleConversationSidebar(false);
+            } catch(e) { alert(e.message || '无法发起新聊天'); }
+            finally { conversationTransitioning = false; }
         }
 
         async function openConversation(id, closePanel=false){
             if(currentConversation?.id) conversationScrollPositions.set(currentConversation.id, document.getElementById('messages')?.scrollTop || 0);
             const data = await fetch(`/api/conversations/${id}`, {headers:{'X-User-ID':userId}}).then(r=>r.json());
             currentConversation = data.conversation;
+            if(currentJinniSnapshot()) applyConversationRuntimeSettings();
+            else restoreGlobalChatSettings();
+            showChatWorkspace();
             rememberConversation(currentConversation.id);
             setChatTitle(currentConversation.title);
             lastRenderedRunSignature = '';
@@ -1322,7 +1901,13 @@
 
         async function deleteConversation(id, event){
             event?.stopPropagation();
-            if(!confirm(tr('chat.deleteConfirm'))) return;
+            const item = conversations.find(conversation => conversation.id === id);
+            const accepted = await showConfirmDialog({
+                title:'删除这条历史对话？',
+                message:`「${item?.title || '新对话'}」将被永久删除，此操作无法撤销。`,
+                confirmText:'删除对话',
+            });
+            if(!accepted) return;
             await fetch(`/api/conversations/${id}`, {method:'DELETE', headers:{'X-User-ID':userId}});
             const deletedCurrent = currentConversation?.id === id;
             [...runStates.values()].filter(run => run.conversation_id === id).forEach(run => runStates.delete(run.id));
@@ -1552,12 +2137,26 @@
             const box = document.getElementById('messages');
             box.innerHTML = '';
             if(!messages.length){
-                box.innerHTML = `<div class="empty-state"><i data-lucide="messages-square"></i><div class="empty-state-text">${tr('chat.ready')}</div></div>`;
+                const jinni = currentJinniSnapshot();
+                if(jinni){
+                    const starters = (jinni.starters || []).map(value => `<button type="button" class="jinni-starter-chip" onclick="sendJinniStarter(decodeURIComponent('${encodeURIComponent(value)}'))">${escapeHtml(value)}</button>`).join('');
+                    box.innerHTML = `<div class="jinni-chat-empty">${jinniAvatarMarkup(jinni)}<h2>${escapeHtml(jinni.name || 'Jinni')}</h2><p>${escapeHtml(jinni.description || '告诉我你想完成什么，我会按照保存的 Jinni 指令协助你。')}</p>${starters ? `<div class="jinni-starter-chips">${starters}</div>` : ''}</div>`;
+                } else {
+                    box.innerHTML = `<div class="empty-state"><i data-lucide="messages-square"></i><div class="empty-state-text">${tr('chat.ready')}</div></div>`;
+                }
                 lucide.createIcons();
                 return;
             }
             messages.forEach(addMessageBubble);
             scrollBottom();
+        }
+
+        function sendJinniStarter(value){
+            const input = document.getElementById('messageInput');
+            if(!input) return;
+            input.value = String(value || '');
+            autoGrow(input);
+            sendMessage();
         }
 
         function addMessageBubble(msg){
@@ -1715,6 +2314,11 @@
         function autoGrow(el){ el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 150) + 'px'; updateComposerOverflow(); }
         function handleKey(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); if(!activeRunForCurrentConversation()) sendMessage(); } }
         window.addEventListener('keydown', e => {
+            if(e.key === 'Escape' && confirmDialogResolver){
+                e.preventDefault();
+                resolveConfirmDialog(false);
+                return;
+            }
             if(e.key === 'Escape') closeImagePreview();
         });
 
@@ -1818,6 +2422,7 @@
             setChatRatio(chatRatio);
             setChatResolution(chatResolution);
             await loadConfig();
+            await loadJinnis();
             await loadRuns();
             await loadConversations();
             updateComposerState();
