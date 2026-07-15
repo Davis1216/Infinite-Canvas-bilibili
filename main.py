@@ -2786,6 +2786,11 @@ class PromptLibraryItemRequest(BaseModel):
 class PromptLibraryBatchDeleteRequest(BaseModel):
     ids: List[str] = []
 
+class PromptLibraryBatchMoveRequest(BaseModel):
+    ids: List[str] = []
+    library_id: str = ""
+    category: str = ""
+
 class PromptLibraryCategoryRequest(BaseModel):
     name: str = "新分组"
     library_id: str = ""
@@ -15842,6 +15847,36 @@ async def batch_delete_prompt_library_items(payload: PromptLibraryBatchDeleteReq
         library["items"] = keep
     data = save_prompt_libraries(data)
     return {"library": public_prompt_libraries(data), "removed": removed}
+
+@app.post("/api/prompt-libraries/items/move")
+async def batch_move_prompt_library_items(payload: PromptLibraryBatchMoveRequest):
+    ids = {str(item) for item in (payload.ids or []) if str(item)}
+    if not ids:
+        raise HTTPException(status_code=400, detail="没有选择提示词")
+    data = load_prompt_libraries()
+    library = find_prompt_library(data, payload.library_id)
+    if not library:
+        raise HTTPException(status_code=404, detail="提示词库不存在")
+    category = normalize_prompt_category_id(payload.category)
+    valid_categories = {
+        normalize_prompt_category_id(item.get("id") or item.get("name") or "")
+        for item in (library.get("categories") or [])
+        if isinstance(item, dict)
+    }
+    if not category or category not in valid_categories:
+        raise HTTPException(status_code=400, detail="目标分组不存在")
+    moved = 0
+    updated_at = now_ms()
+    for item in library.get("items", []) or []:
+        if isinstance(item, dict) and item.get("id") in ids:
+            item["category"] = category
+            item["updated_at"] = updated_at
+            moved += 1
+    if not moved:
+        raise HTTPException(status_code=404, detail="未找到要移动的提示词")
+    data["active_library_id"] = library.get("id") or data.get("active_library_id")
+    data = save_prompt_libraries(data)
+    return {"library": public_prompt_libraries(data), "moved": moved, "category": category}
 
 PROMPT_BUILTIN_CATEGORY_IDS = {"view", "storyboard", "character", "product", "lighting", "custom"}
 

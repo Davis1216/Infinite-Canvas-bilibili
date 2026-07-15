@@ -871,8 +871,14 @@ function selectedWorkflow(){
     return items.find(item => item.id === selectedWorkflowId) || items[0] || null;
 }
 function selectedPrompt(){
-    const items = currentPromptItems();
-    return items.find(item => item.id === selectedPromptId) || items[0] || null;
+    if(!selectedPromptId) return null;
+    return currentPromptItems().find(item => item.id === selectedPromptId) || null;
+}
+function renderPromptCategoryOptions(selected=''){
+    return activePromptCategories().map(category => {
+        const id = category.id || '';
+        return `<option value="${escapeAttr(id)}" ${id === selected ? 'selected' : ''}>${escapeHtml(category.name || promptCategoryLabel(id))}</option>`;
+    }).join('');
 }
 function selectedCanvasAsset(){
     const items = currentCanvasAssetItems();
@@ -994,7 +1000,6 @@ function normalizePromptState(){
     if(activePromptCategory !== 'all' && !cats.some(cat => cat.id === activePromptCategory)) activePromptCategory = 'all';
     const items = currentPromptItems();
     if(selectedPromptId && !items.some(item => item.id === selectedPromptId)) selectedPromptId = '';
-    if(!selectedPromptId && items.length) selectedPromptId = items[0].id;
     selectedPromptIds = new Set([...selectedPromptIds].filter(id => findPromptItem(id)));
 }
 function normalizeCanvasAssetState(){
@@ -1066,6 +1071,8 @@ function render(){
     const scrollState = [...document.querySelectorAll('.nav-scroll,.content-scroll,.detail-scroll')]
         .map((el, index) => ({index, top:el.scrollTop, left:el.scrollLeft}));
     document.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === activeTab));
+    root.classList.toggle('prompt-manager-root', activeTab === 'prompts');
+    document.body.classList.toggle('prompt-manager-view', activeTab === 'prompts');
     if(activeTab === 'prompts') renderPromptManager();
     else if(activeTab === 'workflows') renderWorkflowManager();
     else if(activeTab === 'local') renderLocalManager();
@@ -1081,6 +1088,11 @@ function render(){
                 el.scrollLeft = saved.left;
             });
         });
+    }
+    if(activeTab === 'prompts' && (promptCreateMode || promptEditMode)){
+        requestAnimationFrame(() => document.getElementById('promptEditName')?.focus());
+    } else if(activeTab === 'prompts' && selectedPromptId && !promptManageMode){
+        requestAnimationFrame(() => document.querySelector('[data-prompt-modal-close]')?.focus());
     }
 }
 function updateSearchQueryFromInput(id, value){
@@ -2050,7 +2062,7 @@ function renderPromptManager(){
     const readonly = Boolean(lib?.readonly);
     const cats = activePromptCategories();
     const items = currentPromptItems();
-    const detail = promptCreateMode ? null : selectedPrompt();
+    const detail = promptCreateMode || promptManageMode ? null : selectedPrompt();
     const promptEmptyText = (lib?.items || []).length
         ? '当前条件下没有提示词。可以切换分类或清空搜索条件。'
         : `${lib?.name || '当前提示词库'} 暂无提示词，点击「新增」添加。`;
@@ -2082,7 +2094,14 @@ function renderPromptManager(){
                 </div>
             </div>
             <div class="manage-tools">
-                <span>已选择 ${selectedPromptIds.size} 条提示词，支持拖拽框选或逐个勾选。</span>
+                <div class="manage-group manage-select-group">
+                    <span class="manage-summary">已选择 ${selectedPromptIds.size} 条提示词，支持拖拽框选或逐个勾选。</span>
+                    <select id="promptMoveTarget" class="manage-select" title="目标分组" ${cats.length && selectedPromptIds.size && !readonly ? '' : 'disabled'}>
+                        <option value="">选择目标分组</option>
+                        ${renderPromptCategoryOptions()}
+                    </select>
+                    <button class="asset-btn" type="button" data-prompt-move-selected ${cats.length && selectedPromptIds.size && !readonly ? '' : 'disabled'}><i data-lucide="folder-input"></i><span>移动到分组</span></button>
+                </div>
                 <div class="asset-tools">
                     <button class="asset-btn" type="button" data-prompt-select-all ${items.length && !readonly ? '' : 'disabled'}><i data-lucide="check-square"></i><span>全选</span></button>
                     <button class="asset-btn" type="button" data-prompt-clear-selection ${selectedPromptIds.size ? '' : 'disabled'}><i data-lucide="square"></i><span>清空</span></button>
@@ -2093,10 +2112,26 @@ function renderPromptManager(){
                 ${items.length ? `<div class="prompt-list">${items.map(item => renderPromptRow(item, readonly)).join('')}</div>` : `<div class="empty-state">${escapeHtml(promptEmptyText)}</div>`}
             </div>
         </section>
-        <aside class="asset-panel asset-detail">
-            ${renderPromptDetail(detail, readonly)}
-        </aside>
+        ${renderPromptModal(detail, readonly)}
     `;
+}
+function renderPromptModal(item, readonly){
+    if(!promptCreateMode && !item) return '';
+    return `<div class="prompt-modal" data-prompt-modal-backdrop>
+        <section class="asset-panel prompt-modal-card" role="dialog" aria-modal="true" aria-label="${promptCreateMode ? '新增提示词' : (promptEditMode ? '编辑提示词' : '提示词详情')}">
+            ${renderPromptDetail(item, readonly)}
+        </section>
+    </div>`;
+}
+function resetPromptModalState(){
+    selectedPromptId = '';
+    promptCreateMode = false;
+    promptEditMode = false;
+    pendingDeletePromptId = '';
+}
+function closePromptModal(){
+    resetPromptModalState();
+    render();
 }
 function renderPromptTreeBranch(lib){
     const isActiveLib = lib.id === activePromptLibraryId;
@@ -2182,12 +2217,13 @@ function renderPromptDetail(item, readonly){
                 <div class="panel-title"><strong>新增提示词</strong><span>保存到当前提示词库</span></div>
                 <div class="panel-actions">
                     <button class="asset-btn primary" type="button" data-prompt-create-save><i data-lucide="check"></i><span>保存</span></button>
-                    <button class="asset-icon-btn" type="button" data-prompt-edit-cancel title="取消"><i data-lucide="x"></i></button>
+                    <button class="asset-icon-btn" type="button" data-prompt-modal-close title="关闭"><i data-lucide="x"></i></button>
                 </div>
             </div>
             <div class="detail-scroll">
                 <div class="inline-edit-form">
                     <label class="inline-edit-field"><span>名称</span><input id="promptEditName" type="text" value="" placeholder="提示词名称"></label>
+                    <label class="inline-edit-field"><span>所属分组</span><select id="promptEditCategory">${renderPromptCategoryOptions(activePromptCategory === 'all' ? 'custom' : activePromptCategory)}</select></label>
                     <label class="inline-edit-field"><span>用途说明</span><textarea id="promptEditScene" placeholder="用途说明"></textarea></label>
                     <label class="inline-edit-field"><span>正向提示词</span><textarea id="promptEditPositive" placeholder="正向提示词"></textarea></label>
                     <label class="inline-edit-field"><span>负向提示词</span><textarea id="promptEditNegative" placeholder="负向提示词"></textarea></label>
@@ -2202,12 +2238,13 @@ function renderPromptDetail(item, readonly){
                 <div class="panel-title"><strong>编辑提示词</strong><span>在当前库内保存</span></div>
                 <div class="panel-actions">
                     <button class="asset-btn primary" type="button" data-prompt-edit-save="${escapeAttr(item.id)}"><i data-lucide="check"></i><span>保存</span></button>
-                    <button class="asset-icon-btn" type="button" data-prompt-edit-cancel title="取消"><i data-lucide="x"></i></button>
+                    <button class="asset-icon-btn" type="button" data-prompt-modal-close title="关闭"><i data-lucide="x"></i></button>
                 </div>
             </div>
             <div class="detail-scroll">
                 <div class="inline-edit-form">
                     <label class="inline-edit-field"><span>名称</span><input id="promptEditName" type="text" value="${escapeAttr(item.name || '')}" placeholder="提示词名称"></label>
+                    <label class="inline-edit-field"><span>所属分组</span><select id="promptEditCategory">${renderPromptCategoryOptions(item.category || 'custom')}</select></label>
                     <label class="inline-edit-field"><span>用途说明</span><textarea id="promptEditScene" placeholder="用途说明">${escapeHtml(item.scene || '')}</textarea></label>
                     <label class="inline-edit-field"><span>正向提示词</span><textarea id="promptEditPositive" placeholder="正向提示词">${escapeHtml(item.positive || '')}</textarea></label>
                     <label class="inline-edit-field"><span>负向提示词</span><textarea id="promptEditNegative" placeholder="负向提示词">${escapeHtml(item.negative || '')}</textarea></label>
@@ -2222,6 +2259,7 @@ function renderPromptDetail(item, readonly){
             <div class="panel-actions">
                 <button class="asset-icon-btn" type="button" data-prompt-edit-start="${escapeAttr(item.id)}" ${readonly ? 'disabled' : ''} title="编辑"><i data-lucide="pencil"></i></button>
                 <button class="asset-icon-btn danger ${pendingDeletePromptId === item.id ? 'detail-confirm' : ''}" type="button" data-prompt-delete="${escapeAttr(item.id)}" ${readonly ? 'disabled' : ''} title="${pendingDeletePromptId === item.id ? '再次点击确认删除' : '删除'}"><i data-lucide="trash-2"></i></button>
+                <button class="asset-icon-btn" type="button" data-prompt-modal-close title="关闭"><i data-lucide="x"></i></button>
             </div>
         </div>
         <div class="detail-scroll">
@@ -2858,6 +2896,11 @@ async function saveLocalUploadCaption(id){
 }
 async function handleClick(event){
     const target = event.target;
+    const promptBackdrop = target.closest?.('[data-prompt-modal-backdrop]');
+    if(target.closest?.('[data-prompt-modal-close]') || (promptBackdrop && target === promptBackdrop)){
+        closePromptModal();
+        return;
+    }
     if(guardMatchesManagedSelection(target)){
         event.preventDefault();
         event.stopPropagation();
@@ -2949,7 +2992,7 @@ async function handleClick(event){
         }
     }
     const tabBtn = target.closest?.('[data-tab]');
-    if(tabBtn){ activeTab = tabBtn.dataset.tab || 'assets'; selectedAssetIds.clear(); selectedWorkflowIds.clear(); selectedPromptIds.clear(); selectedLocalIds.clear(); selectedLocalUploadIds.clear(); selectedCanvasAssetIds.clear(); render(); return; }
+    if(tabBtn){ resetPromptModalState(); activeTab = tabBtn.dataset.tab || 'assets'; selectedAssetIds.clear(); selectedWorkflowIds.clear(); selectedPromptIds.clear(); selectedLocalIds.clear(); selectedLocalUploadIds.clear(); selectedCanvasAssetIds.clear(); render(); return; }
     if(target.closest?.('#refreshBtn')){ await loadAll(); return; }
     const assetPreview = target.closest?.('[data-asset-preview]');
     if(assetPreview){ showDetailPreview('asset', assetPreview.dataset.assetPreview || ''); return; }
@@ -3378,6 +3421,7 @@ async function handleClick(event){
     }
     if(target.closest?.('[data-prompt-select-all]')){ currentPromptItems().forEach(item => selectedPromptIds.add(item.id)); pendingBatchDelete = ''; render(); return; }
     if(target.closest?.('[data-prompt-clear-selection]')){ selectedPromptIds.clear(); pendingBatchDelete = ''; render(); return; }
+    if(target.closest?.('[data-prompt-move-selected]')){ await moveSelectedPrompts(); return; }
     const promptEdit = target.closest?.('[data-prompt-edit]');
     if(promptEdit){ await editPromptItem(promptEdit.dataset.promptEdit || ''); return; }
     const promptDelete = target.closest?.('[data-prompt-delete]');
@@ -4164,16 +4208,16 @@ async function savePromptCreate(){
     const scene = document.getElementById('promptEditScene')?.value || '';
     const positive = document.getElementById('promptEditPositive')?.value || '';
     const negative = document.getElementById('promptEditNegative')?.value || '';
+    const selectedCategory = document.getElementById('promptEditCategory')?.value || '';
     if(!lib) return;
     if(!String(name || '').trim() || !String(positive || '').trim()){
         setStatus('名称和正向提示词不能为空');
         return;
     }
-    const category = activePromptCategory === 'all' ? 'custom' : activePromptCategory;
+    const category = selectedCategory || (activePromptCategory === 'all' ? 'custom' : activePromptCategory);
     const data = await apiJson('/api/prompt-libraries/items', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({library_id:lib.id, name, positive, negative, category, scene})});
     promptLibrary = data.library || promptLibrary;
-    selectedPromptId = data.item?.id || selectedPromptId;
-    promptCreateMode = false;
+    resetPromptModalState();
     render();
     setStatus('提示词已新增');
 }
@@ -4199,17 +4243,37 @@ async function savePromptEdit(id){
     const scene = document.getElementById('promptEditScene')?.value || '';
     const positive = document.getElementById('promptEditPositive')?.value || '';
     const negative = document.getElementById('promptEditNegative')?.value || '';
+    const category = document.getElementById('promptEditCategory')?.value || item?.category || 'custom';
     if(!item || !lib) return;
     if(!String(name || '').trim() || !String(positive || '').trim()){
         setStatus('名称和正向提示词不能为空');
         return;
     }
-    const data = await apiJson(`/api/prompt-libraries/items/${encodeURIComponent(id)}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({library_id:lib.id, name, positive, negative, category:item.category || 'custom', scene})});
+    const data = await apiJson(`/api/prompt-libraries/items/${encodeURIComponent(id)}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({library_id:lib.id, name, positive, negative, category, scene})});
     promptLibrary = data.library || promptLibrary;
     selectedPromptId = id;
     promptEditMode = false;
     render();
     setStatus('提示词已保存');
+}
+async function moveSelectedPrompts(){
+    const ids = [...selectedPromptIds];
+    const lib = activePromptLibrary();
+    const category = document.getElementById('promptMoveTarget')?.value || '';
+    if(!ids.length || !lib) return;
+    if(!category){ setStatus('请选择目标分组'); return; }
+    const categoryName = activePromptCategories().find(item => item.id === category)?.name || promptCategoryLabel(category);
+    const data = await apiJson('/api/prompt-libraries/items/move', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ids, library_id:lib.id, category}),
+    });
+    promptLibrary = data.library || promptLibrary;
+    selectedPromptId = '';
+    selectedPromptIds.clear();
+    pendingBatchDelete = '';
+    render();
+    setStatus(`已将 ${data.moved || ids.length} 条提示词移动到「${categoryName}」`);
 }
 async function deletePromptItem(id){
     const item = findPromptItem(id);
@@ -4255,6 +4319,11 @@ document.addEventListener('click', event => {
     if(event.target.closest?.('.asset-lightbox') && !event.target.closest?.('.asset-lightbox-image,.asset-lightbox-video')) closeDetailPreview();
 });
 document.addEventListener('keydown', event => {
+    if(event.key === 'Escape' && activeTab === 'prompts' && (promptCreateMode || promptEditMode || selectedPromptId)){
+        event.preventDefault();
+        closePromptModal();
+        return;
+    }
     if(event.key === 'Escape') closeDetailPreview();
     if(event.target?.id === 'assetTreeEditInput'){
         if(event.key === 'Enter'){ event.preventDefault(); saveAssetTreeEdit().catch(err => setStatus(err.message || '保存失败')); }
@@ -4390,6 +4459,7 @@ uploadInput?.addEventListener('change', event => {
 });
 document.querySelectorAll('[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
+        resetPromptModalState();
         activeTab = btn.dataset.tab || 'assets';
         selectedAssetIds.clear();
         selectedWorkflowIds.clear();
