@@ -43,6 +43,7 @@ QUIET_ACCESS_PATHS = {
     "/api/queue_status",
     "/api/canvases",
     "/api/canvases/trash",
+    "/api/chat/runs",
 }
 QUIET_ACCESS_PREFIXES = (
     "/api/canvases/",
@@ -54,7 +55,7 @@ class QuietAccessLogFilter(logging.Filter):
         if len(args) >= 3:
             path = str(args[2]).split("?", 1)[0]
             status = int(args[4]) if len(args) >= 5 and str(args[4]).isdigit() else 0
-            quiet_dynamic = any(path.startswith(prefix) and path.endswith("/meta") for prefix in QUIET_ACCESS_PREFIXES)
+            quiet_dynamic = any(path.startswith(prefix) and path.endswith("/meta") for prefix in QUIET_ACCESS_PREFIXES) or path.startswith("/api/chat/runs/")
             if (path in QUIET_ACCESS_PATHS or quiet_dynamic) and status < 400:
                 return False
         message = record.getMessage()
@@ -233,6 +234,7 @@ HISTORY_FILE = os.path.join(BASE_DIR, "history.json")
 API_ENV_FILE = os.path.join(BASE_DIR, "API", ".env")
 DATA_DIR = os.path.join(BASE_DIR, "data")
 CONVERSATION_DIR = os.path.join(DATA_DIR, "conversations")
+CHAT_RUN_DIR = os.path.join(DATA_DIR, "chat_runs")
 CANVAS_DIR = os.path.join(DATA_DIR, "canvases")
 MEDIA_PREVIEW_DIR = os.path.join(DATA_DIR, "media_previews")
 ASSET_LIBRARY_PATH = os.path.join(DATA_DIR, "asset_library.json")
@@ -254,6 +256,7 @@ QUEUE_LOCK = Lock()
 HISTORY_LOCK = Lock()
 GLOBAL_CONFIG_LOCK = Lock()
 CONVERSATION_LOCK = Lock()
+CHAT_RUN_LOCK = Lock()
 CANVAS_LOCK = Lock()
 LOAD_LOCK = Lock()
 RUNNINGHUB_WORKFLOW_LOCK = Lock()
@@ -2514,6 +2517,7 @@ class ChatRequest(BaseModel):
     reference_images: List[AIReference] = []
     provider: str = "comfly"
     ms_model: str = ""
+    client_request_id: str = ""
 
 def chat_system_prompt(payload):
     prompt = str(getattr(payload, "system_prompt", "") or "").strip()
@@ -2553,6 +2557,10 @@ class CanvasLLMRequest(BaseModel):
 
 class ConversationCreateRequest(BaseModel):
     title: str = "新对话"
+
+class ConversationUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    pinned: Optional[bool] = None
 
 class CanvasCreateRequest(BaseModel):
     title: str = "未命名画布"
@@ -3872,11 +3880,44 @@ def conversation_path(user_id, conversation_id):
 def now_ms():
     return int(time.time() * 1000)
 
+def _read_conversation_unlocked(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+def _merge_conversation(existing, incoming):
+    if not isinstance(existing, dict):
+        return incoming
+    merged = dict(existing)
+    merged.update(incoming)
+
+    existing_messages = existing.get("messages") or []
+    incoming_messages = incoming.get("messages") or []
+    incoming_by_id = {item.get("id"): item for item in incoming_messages if item.get("id")}
+    messages = [incoming_by_id.pop(item.get("id"), item) for item in existing_messages]
+    messages.extend(item for item in incoming_messages if not item.get("id") or item.get("id") in incoming_by_id)
+    merged["messages"] = messages
+
+    for field in ("title", "pinned"):
+        stamp = f"{field}_updated_at"
+        existing_stamp = int(existing.get(stamp) or 0)
+        incoming_stamp = int(incoming.get(stamp) or 0)
+        if existing_stamp > incoming_stamp:
+            merged[field] = existing.get(field)
+            merged[stamp] = existing_stamp
+    merged["updated_at"] = max(int(existing.get("updated_at") or 0), int(incoming.get("updated_at") or 0))
+    return merged
+
 def save_conversation(user_id, conversation):
     with CONVERSATION_LOCK:
         path = conversation_path(user_id, conversation["id"])
+        if os.path.exists(path):
+            try:
+                conversation = _merge_conversation(_read_conversation_unlocked(path), conversation)
+            except Exception:
+                pass
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(conversation, f, ensure_ascii=False, indent=2)
+    return conversation
 
 def new_conversation(user_id, title="新对话"):
     timestamp = now_ms()
@@ -3885,6 +3926,7 @@ def new_conversation(user_id, title="新对话"):
         "title": (title or "新对话")[:80],
         "created_at": timestamp,
         "updated_at": timestamp,
+        "pinned": False,
         "messages": [],
     }
     save_conversation(user_id, conversation)
@@ -3892,32 +3934,63 @@ def new_conversation(user_id, title="新对话"):
 
 def load_conversation(user_id, conversation_id):
     path = conversation_path(user_id, conversation_id)
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="对话不存在")
-    with open(path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    with CONVERSATION_LOCK:
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail="对话不存在")
+        return _read_conversation_unlocked(path)
 
-def list_conversations(user_id):
+def update_conversation(user_id, conversation_id, title=None, pinned=None):
+    path = conversation_path(user_id, conversation_id)
+    with CONVERSATION_LOCK:
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail="对话不存在")
+        data = _read_conversation_unlocked(path)
+        timestamp = now_ms()
+        if title is not None:
+            clean_title = re.sub(r"\s+", " ", str(title)).strip()
+            if not clean_title:
+                raise HTTPException(status_code=400, detail="对话名称不能为空")
+            data["title"] = clean_title[:80]
+            data["title_updated_at"] = timestamp
+        if pinned is not None:
+            data["pinned"] = bool(pinned)
+            data["pinned_updated_at"] = timestamp
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    return data
+
+def list_conversations(user_id, query=""):
     records = []
-    for filename in os.listdir(user_dir(user_id)):
-        if not filename.endswith(".json"):
-            continue
-        path = os.path.join(user_dir(user_id), filename)
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            continue
-        messages = data.get("messages", [])
-        last_message = next((m for m in reversed(messages) if m.get("role") != "system"), None)
-        records.append({
-            "id": data.get("id"),
-            "title": data.get("title", "新对话"),
-            "created_at": data.get("created_at", 0),
-            "updated_at": data.get("updated_at", 0),
-            "last_message": (last_message or {}).get("content", ""),
-        })
-    return sorted(records, key=lambda item: item["updated_at"], reverse=True)
+    needle = str(query or "").strip().lower()
+    with CONVERSATION_LOCK:
+        directory = user_dir(user_id)
+        for filename in os.listdir(directory):
+            if not filename.endswith(".json"):
+                continue
+            path = os.path.join(directory, filename)
+            try:
+                data = _read_conversation_unlocked(path)
+            except Exception:
+                continue
+            messages = data.get("messages", [])
+            if needle:
+                haystack = "\n".join([str(data.get("title") or "")] + [str(item.get("content") or "") for item in messages]).lower()
+                if needle not in haystack:
+                    continue
+            last_message = next((m for m in reversed(messages) if m.get("role") != "system"), None)
+            record = {
+                "id": data.get("id"),
+                "title": data.get("title", "新对话"),
+                "created_at": data.get("created_at", 0),
+                "updated_at": data.get("updated_at", 0),
+                "pinned": bool(data.get("pinned", False)),
+                "last_message": (last_message or {}).get("content", ""),
+            }
+            status_lookup = globals().get("latest_chat_run_for_conversation")
+            latest_run = status_lookup(user_id, data.get("id")) if callable(status_lookup) else None
+            record["run_status"] = (latest_run or {}).get("status", "")
+            records.append(record)
+    return sorted(records, key=lambda item: (0 if item.get("pinned") else 1, -int(item.get("updated_at") or 0)))
 
 def canvas_path(canvas_id):
     cleaned = re.sub(r"[^a-zA-Z0-9_-]", "", canvas_id or "")
@@ -14702,9 +14775,9 @@ async def canvas_llm(payload: CanvasLLMRequest):
 # --- 对话管理 ---
 
 @app.get("/api/conversations")
-async def conversations(request: Request, x_user_id: str = Header(default="")):
+async def conversations(request: Request, q: str = "", x_user_id: str = Header(default="")):
     user_id = safe_user_id(x_user_id, request)
-    return {"user_id": user_id, "conversations": list_conversations(user_id)}
+    return {"user_id": user_id, "conversations": list_conversations(user_id, q)}
 
 @app.post("/api/conversations")
 async def create_conversation(payload: ConversationCreateRequest, request: Request, x_user_id: str = Header(default="")):
@@ -14716,12 +14789,21 @@ async def get_conversation(conversation_id: str, request: Request, x_user_id: st
     user_id = safe_user_id(x_user_id, request)
     return {"conversation": load_conversation(user_id, conversation_id)}
 
+@app.patch("/api/conversations/{conversation_id}")
+async def patch_conversation(conversation_id: str, payload: ConversationUpdateRequest, request: Request, x_user_id: str = Header(default="")):
+    user_id = safe_user_id(x_user_id, request)
+    return {"conversation": update_conversation(user_id, conversation_id, payload.title, payload.pinned)}
+
 @app.delete("/api/conversations/{conversation_id}")
 async def delete_conversation(conversation_id: str, request: Request, x_user_id: str = Header(default="")):
     user_id = safe_user_id(x_user_id, request)
+    cancel_runs = globals().get("cancel_chat_runs_for_conversation")
+    if callable(cancel_runs):
+        cancel_runs(user_id, conversation_id)
     path = conversation_path(user_id, conversation_id)
-    if os.path.exists(path):
-        os.remove(path)
+    with CONVERSATION_LOCK:
+        if os.path.exists(path):
+            os.remove(path)
     return {"ok": True}
 
 # --- 画布管理 ---
@@ -16502,6 +16584,255 @@ async def chat_stream(payload: ChatRequest, request: Request, x_user_id: str = H
         yield sse_event({"type": "done", "conversation": conversation, "message": assistant_message})
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+# --- GPT 对话后台任务 ---
+
+CHAT_RUN_ACTIVE_STATUSES = {"queued", "running"}
+CHAT_RUN_TERMINAL_STATUSES = {"succeeded", "failed", "cancelled", "interrupted"}
+CHAT_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+CHAT_RUNS: Dict[str, Dict[str, Any]] = {}
+CHAT_RUN_TASKS: Dict[str, asyncio.Task] = {}
+
+def chat_run_user_dir(user_id):
+    path = os.path.join(CHAT_RUN_DIR, user_id)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def chat_run_path(user_id, run_id):
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]", "", run_id or "")
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="无效的任务 ID")
+    return os.path.join(chat_run_user_dir(user_id), f"{cleaned}.json")
+
+def public_chat_run(run):
+    return {key: value for key, value in (run or {}).items() if key != "user_id"}
+
+def save_chat_run(run):
+    snapshot = dict(run)
+    with CHAT_RUN_LOCK:
+        CHAT_RUNS[snapshot["id"]] = snapshot
+        path = chat_run_path(snapshot["user_id"], snapshot["id"])
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(snapshot, f, ensure_ascii=False, indent=2)
+    return snapshot
+
+def set_chat_run_fields(run_id, persist=True, **fields):
+    with CHAT_RUN_LOCK:
+        current = CHAT_RUNS.get(run_id)
+        if not current:
+            return None
+        current.update(fields)
+        current["updated_at"] = now_ms()
+        snapshot = dict(current)
+    return save_chat_run(snapshot) if persist else snapshot
+
+def list_chat_runs(user_id, conversation_id="", active_only=False):
+    with CHAT_RUN_LOCK:
+        records = [dict(item) for item in CHAT_RUNS.values() if item.get("user_id") == user_id]
+    if conversation_id:
+        records = [item for item in records if item.get("conversation_id") == conversation_id]
+    if active_only:
+        records = [item for item in records if item.get("status") in CHAT_RUN_ACTIVE_STATUSES]
+    records.sort(key=lambda item: int(item.get("updated_at") or item.get("created_at") or 0), reverse=True)
+    return records
+
+def latest_chat_run_for_conversation(user_id, conversation_id):
+    records = list_chat_runs(user_id, conversation_id)
+    return records[0] if records else None
+
+def active_chat_run_for_conversation(user_id, conversation_id):
+    records = list_chat_runs(user_id, conversation_id, active_only=True)
+    return records[0] if records else None
+
+def find_chat_run_by_client_request(user_id, client_request_id):
+    if not client_request_id:
+        return None
+    with CHAT_RUN_LOCK:
+        matches = [dict(item) for item in CHAT_RUNS.values() if item.get("user_id") == user_id and item.get("client_request_id") == client_request_id]
+    return max(matches, key=lambda item: int(item.get("created_at") or 0)) if matches else None
+
+def cancel_chat_runs_for_conversation(user_id, conversation_id):
+    records = list_chat_runs(user_id, conversation_id, active_only=True)
+    for run in records:
+        set_chat_run_fields(run["id"], status="cancelled", error="已停止生成", finished_at=now_ms())
+        task = CHAT_RUN_TASKS.get(run["id"])
+        if task and not task.done():
+            task.cancel()
+    return len(records)
+
+def recover_chat_runs():
+    os.makedirs(CHAT_RUN_DIR, exist_ok=True)
+    cutoff = now_ms() - CHAT_RUN_RETENTION_MS
+    for user_id in os.listdir(CHAT_RUN_DIR):
+        directory = os.path.join(CHAT_RUN_DIR, user_id)
+        if not os.path.isdir(directory):
+            continue
+        for filename in os.listdir(directory):
+            if not filename.endswith(".json"):
+                continue
+            path = os.path.join(directory, filename)
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    run = json.load(f)
+            except Exception:
+                continue
+            if run.get("status") in CHAT_RUN_ACTIVE_STATUSES:
+                run.update({
+                    "status": "interrupted",
+                    "error": "服务已重启，任务已中断",
+                    "finished_at": now_ms(),
+                    "updated_at": now_ms(),
+                })
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump(run, f, ensure_ascii=False, indent=2)
+            if run.get("status") in CHAT_RUN_TERMINAL_STATUSES and int(run.get("updated_at") or 0) < cutoff:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+                continue
+            if run.get("id") and run.get("user_id"):
+                CHAT_RUNS[run["id"]] = run
+
+recover_chat_runs()
+
+def chat_run_error_detail(exc):
+    detail = getattr(exc, "detail", None)
+    if isinstance(detail, (dict, list)):
+        return json.dumps(detail, ensure_ascii=False)
+    return str(detail or exc or "任务执行失败")
+
+async def consume_chat_stream_for_run(run_id, response):
+    buffer = ""
+    last_persisted = 0.0
+    final_event = None
+    async for chunk in response.body_iterator:
+        if isinstance(chunk, bytes):
+            chunk = chunk.decode("utf-8", errors="ignore")
+        buffer += str(chunk)
+        events = buffer.split("\n\n")
+        buffer = events.pop() or ""
+        for event_text in events:
+            line = next((item for item in event_text.splitlines() if item.startswith("data:")), "")
+            if not line:
+                continue
+            event = json.loads(line[5:].strip())
+            if event.get("type") == "delta":
+                with CHAT_RUN_LOCK:
+                    current = CHAT_RUNS.get(run_id) or {}
+                    partial = str(current.get("partial_content") or "") + str(event.get("delta") or "")
+                should_persist = time.monotonic() - last_persisted >= 0.5
+                set_chat_run_fields(run_id, persist=should_persist, partial_content=partial)
+                if should_persist:
+                    last_persisted = time.monotonic()
+            elif event.get("type") == "error":
+                raise RuntimeError(event.get("detail") or "请求失败")
+            elif event.get("type") == "done":
+                final_event = event
+    return final_event or {}
+
+async def run_chat_background(run_id, payload, request, user_id):
+    set_chat_run_fields(run_id, status="running", started_at=now_ms(), error="")
+    try:
+        if payload.mode == "agent":
+            result = await chat_agent(payload, request, user_id)
+            final_event = result if isinstance(result, dict) else {}
+        elif payload.mode == "image":
+            result = await chat(payload, request, user_id)
+            final_event = result if isinstance(result, dict) else {}
+        else:
+            response = await chat_stream(payload, request, user_id)
+            final_event = await consume_chat_stream_for_run(run_id, response)
+        message = final_event.get("message") or {}
+        set_chat_run_fields(
+            run_id,
+            status="succeeded",
+            partial_content=str(message.get("content") or (CHAT_RUNS.get(run_id) or {}).get("partial_content") or ""),
+            result_message_id=message.get("id") or "",
+            finished_at=now_ms(),
+            error="",
+        )
+    except asyncio.CancelledError:
+        current = CHAT_RUNS.get(run_id) or {}
+        if current.get("status") not in {"cancelled", "interrupted"}:
+            set_chat_run_fields(run_id, status="cancelled", error="已停止生成", finished_at=now_ms())
+        raise
+    except Exception as exc:
+        set_chat_run_fields(run_id, status="failed", error=chat_run_error_detail(exc), finished_at=now_ms())
+    finally:
+        CHAT_RUN_TASKS.pop(run_id, None)
+
+@app.post("/api/chat/runs", status_code=202)
+async def create_chat_run(payload: ChatRequest, request: Request, x_user_id: str = Header(default="")):
+    user_id = safe_user_id(x_user_id, request)
+    client_request_id = re.sub(r"[^a-zA-Z0-9_.-]", "", payload.client_request_id or "")[:120]
+    duplicate = find_chat_run_by_client_request(user_id, client_request_id)
+    if duplicate:
+        return {"run": public_chat_run(duplicate), "conversation": load_conversation(user_id, duplicate["conversation_id"]), "duplicate": True}
+
+    if payload.conversation_id:
+        conversation = load_conversation(user_id, payload.conversation_id)
+    else:
+        conversation = new_conversation(user_id, display_title(payload.message))
+        payload.conversation_id = conversation["id"]
+    active = active_chat_run_for_conversation(user_id, conversation["id"])
+    if active:
+        raise HTTPException(status_code=409, detail="当前对话正在生成，请等待完成或先停止任务")
+
+    timestamp = now_ms()
+    run = {
+        "id": f"chat_{uuid.uuid4().hex}",
+        "user_id": user_id,
+        "conversation_id": conversation["id"],
+        "client_request_id": client_request_id,
+        "status": "queued",
+        "mode": payload.mode,
+        "provider_id": payload.provider,
+        "model": payload.image_model if payload.mode == "image" else payload.model,
+        "size": payload.size,
+        "partial_content": "",
+        "error": "",
+        "result_message_id": "",
+        "created_at": timestamp,
+        "updated_at": timestamp,
+        "started_at": 0,
+        "finished_at": 0,
+    }
+    save_chat_run(run)
+    payload_snapshot = payload.model_copy(deep=True) if hasattr(payload, "model_copy") else payload.copy(deep=True)
+    task = asyncio.create_task(run_chat_background(run["id"], payload_snapshot, request, user_id))
+    CHAT_RUN_TASKS[run["id"]] = task
+    return {"run": public_chat_run(run), "conversation": conversation, "duplicate": False}
+
+@app.get("/api/chat/runs")
+async def get_chat_runs(request: Request, conversation_id: str = "", active_only: bool = False, x_user_id: str = Header(default="")):
+    user_id = safe_user_id(x_user_id, request)
+    return {"runs": [public_chat_run(item) for item in list_chat_runs(user_id, conversation_id, active_only)]}
+
+@app.get("/api/chat/runs/{run_id}")
+async def get_chat_run(run_id: str, request: Request, x_user_id: str = Header(default="")):
+    user_id = safe_user_id(x_user_id, request)
+    with CHAT_RUN_LOCK:
+        run = dict(CHAT_RUNS.get(run_id) or {})
+    if not run or run.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return {"run": public_chat_run(run)}
+
+@app.post("/api/chat/runs/{run_id}/cancel")
+async def cancel_chat_run(run_id: str, request: Request, x_user_id: str = Header(default="")):
+    user_id = safe_user_id(x_user_id, request)
+    with CHAT_RUN_LOCK:
+        run = dict(CHAT_RUNS.get(run_id) or {})
+    if not run or run.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if run.get("status") in CHAT_RUN_ACTIVE_STATUSES:
+        set_chat_run_fields(run_id, status="cancelled", error="已停止生成", finished_at=now_ms())
+        task = CHAT_RUN_TASKS.get(run_id)
+        if task and not task.done():
+            task.cancel()
+    with CHAT_RUN_LOCK:
+        latest = dict(CHAT_RUNS.get(run_id) or run)
+    return {"run": public_chat_run(latest)}
 
 # --- 历史记录 ---
 

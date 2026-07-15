@@ -16,13 +16,13 @@
             } catch(e) {}
         })();
     </script>
-    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
-    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
-    <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
-    <script src="/static/js/i18n.js?v=2026.07.4.2.1783154122"></script>
-    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
+    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783865692"></script>
+    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783865692"></script>
+    <script src="/static/js/theme.js?v=2026.07.4.2.1783865692"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1784042962"></script>
+    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783865692">
     <style>
-        @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783154122');
+        @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783865692');
         :root {
             --ease:cubic-bezier(.4,0,.2,1);
             --chat-bg:#eef2f6;
@@ -458,15 +458,103 @@
         #messageInput::-webkit-scrollbar-thumb {
             background:transparent !important;
         }
+
+        /* 会话工作区 */
+        .chat-shell { display:grid; grid-template-columns:264px minmax(0,1fr); transition:grid-template-columns .2s var(--ease); }
+        .chat-shell.sidebar-collapsed { grid-template-columns:0 minmax(0,1fr); }
+        .conversation-sidebar { min-width:0; height:100%; overflow:hidden; display:flex; flex-direction:column; background:var(--chat-panel); border-right:1px solid var(--chat-line); color:var(--chat-text); transition:transform .2s var(--ease),opacity .2s var(--ease); z-index:30; }
+        .sidebar-collapsed .conversation-sidebar { opacity:0; pointer-events:none; transform:translateX(-16px); }
+        .conversation-sidebar-head { height:66px; padding:0 14px 0 18px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .conversation-sidebar-title { min-width:0; font-size:16px; font-weight:900; white-space:nowrap; }
+        .sidebar-icon-btn { width:34px; height:34px; flex:0 0 34px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:transparent; color:var(--chat-muted); }
+        .sidebar-icon-btn:hover { background:var(--chat-soft); color:var(--chat-text); }
+        .sidebar-icon-btn i,.sidebar-icon-btn svg { width:17px; height:17px; }
+        .sidebar-primary { margin:0 12px 10px; height:42px; flex:0 0 42px; display:flex; align-items:center; gap:10px; padding:0 12px; border-radius:8px; background:var(--chat-soft); color:var(--chat-text); font-size:13px; font-weight:850; border:1px solid transparent; text-align:left; }
+        .sidebar-primary:hover { border-color:var(--chat-line-2); }
+        .sidebar-primary i,.sidebar-primary svg { width:17px; height:17px; }
+        .conversation-search { position:relative; margin:0 12px 12px; }
+        .conversation-search i,.conversation-search svg { position:absolute; left:11px; top:50%; width:16px; height:16px; color:var(--chat-faint); transform:translateY(-50%); pointer-events:none; }
+        .conversation-search input { width:100%; height:38px; padding:0 12px 0 36px; border:1px solid var(--chat-line); border-radius:8px; outline:none; background:transparent; color:var(--chat-text); font-size:12px; }
+        .conversation-search input:focus { border-color:var(--chat-line-2); background:var(--chat-bg); }
+        .conversation-search input::placeholder { color:var(--chat-faint); }
+        .thread-list { padding:0 8px 18px; gap:0; }
+        .thread-group { margin-top:12px; }
+        .thread-group:first-child { margin-top:0; }
+        .thread-group-title { height:28px; padding:0 9px; display:flex; align-items:center; color:var(--chat-faint); font-size:11px; font-weight:850; }
+        .thread-row { margin:1px 0; }
+        .thread-item { min-height:44px; border:0; border-radius:8px; padding:7px 40px 7px 10px; }
+        .thread-item:hover,.thread-item.active { background:var(--chat-soft); border-color:transparent; box-shadow:none; color:var(--chat-text); }
+        .thread-title-line { display:flex; align-items:center; gap:7px; min-width:0; }
+        .thread-title-text { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:780; }
+        .thread-preview { margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--chat-faint); font-size:10px; line-height:1.2; }
+        .thread-status-dot { width:7px; height:7px; flex:0 0 7px; border-radius:50%; background:var(--chat-faint); }
+        .thread-status-dot.queued { background:#d97706; }
+        .thread-status-dot.running { background:#2563eb; animation:statusPulse 1.2s ease-in-out infinite; }
+        .thread-status-dot.failed,.thread-status-dot.interrupted { background:#dc2626; }
+        .thread-status-dot.cancelled { background:#64748b; }
+        .thread-menu-button { position:absolute; top:6px; right:6px; width:30px; height:30px; border-radius:7px; display:flex; align-items:center; justify-content:center; background:transparent; color:var(--chat-muted); opacity:0; }
+        .thread-row:hover .thread-menu-button,.thread-row:focus-within .thread-menu-button,.thread-menu-button.active { opacity:1; }
+        .thread-menu-button:hover { background:var(--chat-bg); color:var(--chat-text); }
+        .thread-menu-button i,.thread-menu-button svg { width:15px; height:15px; }
+        .thread-menu-popover { position:absolute; top:34px; right:6px; width:138px; padding:5px; display:none; border:1px solid var(--chat-line); border-radius:8px; background:var(--chat-panel); box-shadow:0 14px 30px var(--chat-shadow); z-index:80; }
+        .thread-menu-popover.open { display:block; }
+        .thread-menu-popover button { width:100%; height:34px; padding:0 9px; display:flex; align-items:center; gap:8px; border-radius:6px; background:transparent; color:var(--chat-text); font-size:11px; text-align:left; }
+        .thread-menu-popover button:hover { background:var(--chat-soft); }
+        .thread-menu-popover button.danger { color:#dc2626; }
+        .thread-menu-popover i,.thread-menu-popover svg { width:14px; height:14px; }
+        .thread-empty { padding:36px 14px; color:var(--chat-faint); font-size:12px; text-align:center; }
+        .sidebar-backdrop { display:none; }
+        .topbar-left { min-width:0; display:flex; align-items:center; gap:10px; }
+        .sidebar-open-btn { display:none; }
+        .sidebar-collapsed .sidebar-open-btn { display:flex; }
+        .send-btn.stop { background:#dc2626 !important; color:#fff !important; }
+        .run-state-message { color:var(--chat-muted); }
+        @keyframes statusPulse { 50% { opacity:.35; } }
+
+        html.studio-theme-dark body .conversation-sidebar,
+        body.studio-theme-dark .conversation-sidebar,
+        html.theme-dark body .conversation-sidebar,
+        body.theme-dark .conversation-sidebar,
+        html.studio-theme-dark body .thread-menu-popover,
+        body.studio-theme-dark .thread-menu-popover,
+        html.theme-dark body .thread-menu-popover,
+        body.theme-dark .thread-menu-popover { background:var(--chat-panel) !important; border-color:var(--chat-line) !important; }
+
+        @media (max-width:900px){
+            .chat-shell,.chat-shell.sidebar-collapsed { display:block; }
+            .conversation-sidebar { position:absolute; inset:0 auto 0 0; width:min(286px,86vw); transform:translateX(-102%); opacity:1; pointer-events:none; box-shadow:18px 0 42px rgba(15,23,42,.22); }
+            .chat-shell.sidebar-mobile-open .conversation-sidebar { transform:translateX(0); pointer-events:auto; }
+            .sidebar-collapsed .conversation-sidebar { opacity:1; }
+            .sidebar-backdrop { position:absolute; inset:0; z-index:29; background:rgba(15,23,42,.28); }
+            .chat-shell.sidebar-mobile-open .sidebar-backdrop { display:block; }
+            .sidebar-open-btn,.sidebar-collapsed .sidebar-open-btn { display:flex; }
+            .conversation-sidebar-head { height:62px; }
+        }
     </style>
 </head>
 <body>
-    <div class="chat-shell">
+    <div id="chatShell" class="chat-shell">
+        <aside id="conversationSidebar" class="conversation-sidebar" aria-label="会话列表">
+            <div class="conversation-sidebar-head">
+                <div class="conversation-sidebar-title">GPT 对话</div>
+                <button type="button" class="sidebar-icon-btn" onclick="toggleConversationSidebar(false)" title="收起会话栏" aria-label="收起会话栏"><i data-lucide="panel-left-close"></i></button>
+            </div>
+            <button type="button" class="sidebar-primary" onclick="newConversation()"><i data-lucide="square-pen"></i><span>新聊天</span></button>
+            <label class="conversation-search" aria-label="搜索对话">
+                <i data-lucide="search"></i>
+                <input id="conversationSearch" type="search" placeholder="搜索对话" oninput="handleConversationSearch(this.value)">
+            </label>
+            <div id="threadList" class="thread-list"></div>
+        </aside>
+        <button type="button" class="sidebar-backdrop" onclick="toggleConversationSidebar(false)" aria-label="关闭会话栏"></button>
         <main class="chat-main">
             <header class="topbar">
                 <div class="topbar-inner">
-                    <div class="title-block">
-                        <h1 id="chatTitle" data-i18n="chat.newConversation">新对话</h1>
+                    <div class="topbar-left">
+                        <button type="button" class="action-btn sidebar-open-btn" onclick="toggleConversationSidebar(true)" title="打开会话栏" aria-label="打开会话栏"><i data-lucide="panel-left-open"></i></button>
+                        <div class="title-block">
+                            <h1 id="chatTitle" data-i18n="chat.newConversation">新对话</h1>
+                        </div>
                     </div>
                     <div class="top-actions">
                         <button onclick="event.stopPropagation();newConversation()" class="action-btn" title="新建对话" data-i18n-title="chat.newConversation"><i data-lucide="plus"></i><span data-i18n="chat.new">新建</span></button>
@@ -481,18 +569,6 @@
                                 <button type="button" onclick="clearSystemPrompt()">清空</button>
                                 <button type="button" class="primary" onclick="saveSystemPromptFromUI()">保存</button>
                             </div>
-                        </aside>
-                        <button onclick="event.stopPropagation();toggleHistory()" class="action-btn history-toggle" title="历史对话" data-i18n-title="chat.history"><i data-lucide="history"></i><span data-i18n="chat.history">历史</span></button>
-                        <aside id="historyPopover" class="chat-rail">
-                            <div class="rail-head">
-                                <div>
-                                    <div class="rail-kicker" data-i18n="chat.historyTitle">Conversations</div>
-                                    <div class="rail-title" data-i18n="chat.history">历史</div>
-                                </div>
-                                <button onclick="event.stopPropagation();toggleHistory(false)" class="rail-close" title="关闭" aria-label="关闭"><i data-lucide="x"></i></button>
-                            </div>
-                            <button onclick="event.stopPropagation();newConversation()" class="rail-new" title="新建对话" data-i18n-title="chat.newConversation"><i data-lucide="plus"></i><span data-i18n="chat.new">新建</span></button>
-                            <div id="threadList" class="thread-list"></div>
                         </aside>
                     </div>
                 </div>
@@ -659,6 +735,12 @@
         const savedChatSettings = readChatSettings();
         let conversations = [];
         let currentConversation = null;
+        const runStates = new Map();
+        const conversationScrollPositions = new Map();
+        let conversationSearch = '';
+        let conversationSearchTimer = null;
+        let runPollTimer = null;
+        let lastRenderedRunSignature = '';
         let mode = 'agent';
         let provider = savedChatSettings.provider || 'comfly';
         let msModel = savedChatSettings.msModel || '';
@@ -734,7 +816,6 @@
             const shouldOpen = typeof force === 'boolean' ? force : !pop.classList.contains('open');
             pop.classList.toggle('open', shouldOpen);
             if(shouldOpen){
-                toggleHistory(false);
                 syncSystemPromptUI();
                 lucide.createIcons();
             }
@@ -1018,7 +1099,7 @@
             } else {
                 modelLabel.textContent = shortModelName(currentMdl);
             }
-            title.textContent = mode === 'agent' ? 'Agent 模型' : (kind === 'image' ? '生图模型' : '对话模型');
+            title.textContent = mode === 'agent' ? '智能助手模型' : (kind === 'image' ? '生图模型' : '对话模型');
             scope.innerHTML = mode === 'agent'
                 ? `<button class="${kind === 'chat' ? 'active' : ''}" onclick="setModelPickerScope('chat')">对话</button><button class="${kind === 'image' ? 'active' : ''}" onclick="setModelPickerScope('image')">图像</button>`
                 : '';
@@ -1034,8 +1115,104 @@
             lucide.createIcons();
         }
 
+        function latestRunForConversation(id){
+            return [...runStates.values()]
+                .filter(run => run.conversation_id === id)
+                .sort((a,b) => Number(b.updated_at || b.created_at || 0) - Number(a.updated_at || a.created_at || 0))[0] || null;
+        }
+
+        function runStatusLabel(status){
+            return ({queued:'等待中', running:'生成中', failed:'生成失败', cancelled:'已停止', interrupted:'已中断'})[status] || '';
+        }
+
+        function runStatusClass(status){
+            return ['queued','running','failed','cancelled','interrupted'].includes(status) ? status : '';
+        }
+
+        function conversationGroup(item){
+            if(item.pinned) return '置顶';
+            const timestamp = Number(item.updated_at || item.created_at || 0);
+            const now = new Date();
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            if(timestamp >= todayStart) return '今天';
+            if(timestamp >= todayStart - 6 * 24 * 60 * 60 * 1000) return '过去 7 天';
+            if(timestamp >= todayStart - 29 * 24 * 60 * 60 * 1000) return '过去 30 天';
+            return '更早';
+        }
+
+        function visibleConversations(){
+            return conversations;
+        }
+
+        function renderThreads(){
+            const list = document.getElementById('threadList');
+            if(!list) return;
+            list.innerHTML = '';
+            const items = visibleConversations();
+            if(!items.length){
+                list.innerHTML = `<div class="thread-empty">${conversationSearch ? '没有找到匹配的对话' : '还没有对话'}</div>`;
+                return;
+            }
+            const groups = new Map();
+            items.forEach(item => {
+                const group = conversationGroup(item);
+                if(!groups.has(group)) groups.set(group, []);
+                groups.get(group).push(item);
+            });
+            ['置顶','今天','过去 7 天','过去 30 天','更早'].forEach(groupName => {
+                const groupItems = groups.get(groupName);
+                if(!groupItems?.length) return;
+                const section = document.createElement('section');
+                section.className = 'thread-group';
+                section.innerHTML = `<div class="thread-group-title">${groupName}</div>`;
+                groupItems.forEach(item => {
+                    const run = latestRunForConversation(item.id);
+                    const status = run?.status || item.run_status || '';
+                    const row = document.createElement('div');
+                    row.className = 'thread-row';
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = `thread-item ${currentConversation?.id === item.id ? 'active' : ''}`;
+                    btn.onclick = () => openConversation(item.id, true);
+                    btn.innerHTML = `<div class="thread-title-line">${status && runStatusClass(status) ? `<span class="thread-status-dot ${runStatusClass(status)}"></span>` : ''}<span class="thread-title-text">${escapeHtml(item.title || defaultTitle())}</span></div><div class="thread-preview">${escapeHtml(status && runStatusLabel(status) || item.last_message || '空对话')}</div>`;
+                    const menuButton = document.createElement('button');
+                    menuButton.type = 'button';
+                    menuButton.className = 'thread-menu-button';
+                    menuButton.title = '会话操作';
+                    menuButton.setAttribute('aria-label', '会话操作');
+                    menuButton.innerHTML = '<i data-lucide="more-horizontal"></i>';
+                    menuButton.onclick = event => { event.stopPropagation(); toggleThreadMenu(row); };
+                    const menu = document.createElement('div');
+                    menu.className = 'thread-menu-popover';
+                    menu.innerHTML = `<button type="button" data-action="pin"><i data-lucide="pin"></i><span>${item.pinned ? '取消置顶' : '置顶对话'}</span></button><button type="button" data-action="rename"><i data-lucide="pencil"></i><span>重命名</span></button><button type="button" data-action="delete" class="danger"><i data-lucide="trash-2"></i><span>删除对话</span></button>`;
+                    menu.querySelector('[data-action="pin"]').onclick = event => { event.stopPropagation(); togglePinConversation(item); };
+                    menu.querySelector('[data-action="rename"]').onclick = event => { event.stopPropagation(); renameConversation(item); };
+                    menu.querySelector('[data-action="delete"]').onclick = event => { event.stopPropagation(); deleteConversation(item.id, event); };
+                    row.append(btn, menuButton, menu);
+                    section.appendChild(row);
+                });
+                list.appendChild(section);
+            });
+            lucide.createIcons();
+        }
+
+        function toggleThreadMenu(row){
+            document.querySelectorAll('.thread-menu-popover.open').forEach(item => { if(item !== row.querySelector('.thread-menu-popover')) item.classList.remove('open'); });
+            const menu = row.querySelector('.thread-menu-popover');
+            const button = row.querySelector('.thread-menu-button');
+            menu?.classList.toggle('open');
+            button?.classList.toggle('active', menu?.classList.contains('open'));
+        }
+
+        function handleConversationSearch(value){
+            conversationSearch = String(value || '');
+            renderThreads();
+            if(conversationSearchTimer) clearTimeout(conversationSearchTimer);
+            conversationSearchTimer = setTimeout(loadConversations, 220);
+        }
+
         async function loadConversations(){
-            const data = await fetch('/api/conversations', {headers:{'X-User-ID':userId}}).then(r=>r.json());
+            const data = await fetch(`/api/conversations?q=${encodeURIComponent(conversationSearch)}`, {headers:{'X-User-ID':userId}}).then(r=>r.json());
             conversations = data.conversations || [];
             renderThreads();
             if(!currentConversation) {
@@ -1046,68 +1223,125 @@
             if(!currentConversation) renderMessages([]);
         }
 
-        function renderThreads(){
-            const list = document.getElementById('threadList');
-            list.innerHTML = '';
-            if(!conversations.length){
-                list.innerHTML = `<div class="px-3 py-8 text-center text-[11px] font-bold text-gray-300 uppercase tracking-widest">${tr('chat.noHistory')}</div>`;
-                return;
+        async function loadRuns(){
+            const data = await fetch('/api/chat/runs', {headers:{'X-User-ID':userId}}).then(r=>r.json());
+            runStates.clear();
+            (data.runs || []).forEach(run => runStates.set(run.id, run));
+            renderThreads();
+            renderCurrentRunState();
+            scheduleRunPolling();
+        }
+
+        function scheduleRunPolling(){
+            if(runPollTimer) clearTimeout(runPollTimer);
+            const hasActive = [...runStates.values()].some(run => ['queued','running'].includes(run.status));
+            runPollTimer = setTimeout(pollRuns, hasActive ? 500 : 2200);
+        }
+
+        async function pollRuns(){
+            try {
+                const data = await fetch('/api/chat/runs', {headers:{'X-User-ID':userId}}).then(r=>r.json());
+                const previous = new Map(runStates);
+                runStates.clear();
+                (data.runs || []).forEach(run => runStates.set(run.id, run));
+                renderThreads();
+                const currentRun = currentConversation ? latestRunForConversation(currentConversation.id) : null;
+                const oldRun = currentRun ? previous.get(currentRun.id) : null;
+                if(currentRun && (!oldRun || oldRun.status !== currentRun.status || oldRun.partial_content !== currentRun.partial_content)) {
+                    if(currentRun.status === 'succeeded') await refreshCurrentConversation();
+                    else renderCurrentRunState();
+                }
+            } catch(e) {}
+            scheduleRunPolling();
+        }
+
+        function renderCurrentRunState(){
+            if(!currentConversation) return;
+            const run = latestRunForConversation(currentConversation.id);
+            const signature = `${run?.id || ''}:${run?.status || ''}:${run?.partial_content || ''}:${currentConversation.messages?.length || 0}`;
+            if(signature === lastRenderedRunSignature) return;
+            lastRenderedRunSignature = signature;
+            const messages = [...(currentConversation.messages || [])];
+            if(run && ['queued','running','failed','cancelled','interrupted'].includes(run.status)) {
+                const content = run.partial_content || run.error || runStatusLabel(run.status);
+                if(content) messages.push({role:'assistant', content, run_status:run.status});
             }
-            conversations.forEach(item => {
-                const row = document.createElement('div');
-                row.className = 'thread-row';
-                const btn = document.createElement('button');
-                btn.className = `thread-item ${currentConversation?.id === item.id ? 'active' : ''}`;
-                btn.onclick = () => openConversation(item.id, true);
-                btn.innerHTML = `<div class="text-sm font-bold truncate">${escapeHtml(item.title || defaultTitle())}</div><div class="text-[11px] opacity-50 truncate mt-1">${escapeHtml(item.last_message || '')}</div>`;
-                const del = document.createElement('button');
-                del.className = 'thread-delete';
-                del.title = tr('chat.deleteTitle');
-                del.onclick = (event) => deleteConversation(item.id, event);
-                del.innerHTML = '<i data-lucide="x" class="w-3.5 h-3.5"></i>';
-                row.appendChild(btn);
-                row.appendChild(del);
-                list.appendChild(row);
-            });
-            lucide.createIcons();
+            renderMessages(messages);
+            updateComposerState();
+        }
+
+        async function refreshCurrentConversation(){
+            if(!currentConversation?.id) return;
+            const data = await fetch(`/api/conversations/${currentConversation.id}`, {headers:{'X-User-ID':userId}}).then(r=>r.json());
+            currentConversation = data.conversation;
+            setChatTitle(currentConversation.title);
+            lastRenderedRunSignature = '';
+            renderCurrentRunState();
+            await loadConversations();
         }
 
         async function newConversation(){
+            conversationSearch = '';
+            const searchInput = document.getElementById('conversationSearch');
+            if(searchInput) searchInput.value = '';
             const data = await fetch('/api/conversations', {method:'POST', headers:headers(), body:JSON.stringify({title:'新对话'})}).then(r=>r.json());
             currentConversation = data.conversation;
             rememberConversation(currentConversation.id);
             setChatTitle(currentConversation.title);
-            await loadConversations();
+            lastRenderedRunSignature = '';
             renderMessages([]);
-            toggleHistory(false);
+            await loadConversations();
+            if(window.innerWidth <= 900) toggleConversationSidebar(false);
         }
 
         async function openConversation(id, closePanel=false){
+            if(currentConversation?.id) conversationScrollPositions.set(currentConversation.id, document.getElementById('messages')?.scrollTop || 0);
             const data = await fetch(`/api/conversations/${id}`, {headers:{'X-User-ID':userId}}).then(r=>r.json());
             currentConversation = data.conversation;
             rememberConversation(currentConversation.id);
             setChatTitle(currentConversation.title);
+            lastRenderedRunSignature = '';
             renderThreads();
-            renderMessages(currentConversation.messages || []);
-            if(closePanel) toggleHistory(false);
+            renderCurrentRunState();
+            requestAnimationFrame(() => { const box = document.getElementById('messages'); if(box) box.scrollTop = conversationScrollPositions.get(id) || box.scrollHeight; });
+            if(window.innerWidth <= 900 && closePanel) toggleConversationSidebar(false);
+        }
+
+        async function renameConversation(item){
+            const next = prompt('请输入新的对话名称', item.title || '新对话');
+            if(next === null || !next.trim()) return;
+            const data = await fetch(`/api/conversations/${item.id}`, {method:'PATCH', headers:headers(), body:JSON.stringify({title:next.trim()})}).then(r=>r.json());
+            if(currentConversation?.id === item.id) { currentConversation = data.conversation; setChatTitle(currentConversation.title); }
+            await loadConversations();
+        }
+
+        async function togglePinConversation(item){
+            await fetch(`/api/conversations/${item.id}`, {method:'PATCH', headers:headers(), body:JSON.stringify({pinned:!item.pinned})});
+            await loadConversations();
         }
 
         async function deleteConversation(id, event){
-            event.stopPropagation();
+            event?.stopPropagation();
             if(!confirm(tr('chat.deleteConfirm'))) return;
             await fetch(`/api/conversations/${id}`, {method:'DELETE', headers:{'X-User-ID':userId}});
             const deletedCurrent = currentConversation?.id === id;
+            [...runStates.values()].filter(run => run.conversation_id === id).forEach(run => runStates.delete(run.id));
             if(deletedCurrent){ currentConversation = null; rememberConversation(''); setChatTitle(''); renderMessages([]); }
             await loadConversations();
             if(deletedCurrent && conversations[0]) await openConversation(conversations[0].id);
         }
 
-        function toggleHistory(force){
-            const pop = document.getElementById('historyPopover');
-            const shouldOpen = typeof force === 'boolean' ? force : !pop.classList.contains('open');
-            pop.classList.toggle('open', shouldOpen);
-            if(shouldOpen) lucide.createIcons();
+        function toggleConversationSidebar(force){
+            const shell = document.getElementById('chatShell');
+            if(!shell) return;
+            if(window.innerWidth <= 900){
+                shell.classList.toggle('sidebar-mobile-open', force === true ? true : force === false ? false : !shell.classList.contains('sidebar-mobile-open'));
+                return;
+            }
+            shell.classList.toggle('sidebar-collapsed', force === true ? false : force === false ? true : !shell.classList.contains('sidebar-collapsed'));
         }
+
+        function toggleHistory(force){ toggleConversationSidebar(force); }
 
         document.addEventListener('click', (event) => {
             const picker = document.getElementById('modelPicker');
@@ -1116,10 +1350,8 @@
             const resolutionPicker = document.getElementById('resolutionPicker');
             const resolutionPopover = document.getElementById('resolutionPickerPopover');
             if(resolutionPicker?.classList.contains('open') && !resolutionPicker.contains(event.target) && !resolutionPopover?.contains(event.target)) toggleResolutionPicker(false);
-            if(window.innerWidth > 900) return;
-            const rail = document.getElementById('historyPopover');
-            const actions = document.querySelector('.top-actions');
-            if(rail?.classList.contains('open') && !rail.contains(event.target) && actions && !actions.contains(event.target)) toggleHistory(false);
+            const menu = event.target.closest?.('.thread-menu-popover,.thread-menu-button');
+            if(!menu) document.querySelectorAll('.thread-menu-popover.open').forEach(item => item.classList.remove('open'));
         });
 
         function setMode(next, persist = true){
@@ -1146,7 +1378,7 @@
                     ? (msModel || (config.ms_chat_models?.[0]) || 'ModelScope').split('/').pop().split(':')[0]
                     : (activeChatModel || config.chat_model || 'Chat');
                 const imageLabel = (activeImageModel || config.image_model || 'Image').split('/').pop().split(':')[0];
-                label = `Agent · ${chatLabel} + ${imageLabel}`;
+                label = `智能助手 · ${chatLabel} + ${imageLabel}`;
             } else if (provider === 'modelscope') {
                 label = msModel || (config.ms_chat_models?.[0]) || 'ModelScope';
                 // Shorten the display label
@@ -1334,6 +1566,8 @@
             row.className = `bubble-row ${msg.role === 'user' ? 'user' : 'assistant'}`;
             const bubble = document.createElement('div');
             bubble.className = `bubble ${msg.role === 'user' ? 'user' : 'assistant'}`;
+            if(['queued','running'].includes(msg.run_status)) bubble.classList.add('streaming');
+            if(msg.run_status) bubble.classList.add('run-state-message');
             const imageUrls = Array.isArray(msg.image_urls) && msg.image_urls.length ? msg.image_urls : (msg.image_url ? [msg.image_url] : []);
             if(imageUrls.length) bubble.classList.add('image-bubble');
             const text = document.createElement('div');
@@ -1479,12 +1713,61 @@
             body.classList.toggle('has-overflow', body.scrollHeight > body.clientHeight + 2);
         }
         function autoGrow(el){ el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 150) + 'px'; updateComposerOverflow(); }
-        function handleKey(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } }
+        function handleKey(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); if(!activeRunForCurrentConversation()) sendMessage(); } }
         window.addEventListener('keydown', e => {
             if(e.key === 'Escape') closeImagePreview();
         });
 
+        function activeRunForCurrentConversation(){
+            const run = currentConversation ? latestRunForConversation(currentConversation.id) : null;
+            return run && ['queued','running'].includes(run.status) ? run : null;
+        }
+
+        function updateComposerState(){
+            const btn = document.getElementById('sendBtn');
+            if(!btn) return;
+            const active = activeRunForCurrentConversation();
+            btn.classList.toggle('stop', !!active);
+            btn.title = active ? '停止生成' : '发送';
+            btn.setAttribute('aria-label', active ? '停止生成' : '发送');
+            btn.innerHTML = active ? '<i data-lucide="square"></i>' : '<i data-lucide="send"></i>';
+            lucide.createIcons();
+        }
+
+        async function cancelCurrentRun(){
+            const run = activeRunForCurrentConversation();
+            if(!run) return;
+            const data = await fetch(`/api/chat/runs/${run.id}/cancel`, {method:'POST', headers:headers()}).then(r=>r.json());
+            runStates.set(data.run.id, data.run);
+            renderThreads();
+            lastRenderedRunSignature = '';
+            renderCurrentRunState();
+        }
+
+        function chatRunPayload(message, pendingRefs, requestedSize, clientRequestId){
+            const currentProvider = provider;
+            const currentMsModel = currentProvider === 'modelscope' ? (msModel || activeChatModel || (config.ms_chat_models?.[0] || '')) : '';
+            return {
+                conversation_id: currentConversation?.id || '',
+                client_request_id: clientRequestId,
+                message,
+                system_prompt: currentSystemPrompt(),
+                mode,
+                size: requestedSize,
+                model: currentProvider === 'modelscope' ? currentMsModel : (activeChatModel || config.chat_model),
+                ms_model: currentProvider === 'modelscope' ? currentMsModel : '',
+                image_model: activeImageModel || config.image_model,
+                image_provider: activeImageProvider,
+                reference_images: pendingRefs,
+                provider: mode === 'image' ? activeImageProvider : currentProvider,
+            };
+        }
+
         async function sendMessage(){
+            if(activeRunForCurrentConversation()) {
+                await cancelCurrentRun();
+                return;
+            }
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
             if(!message) return;
@@ -1496,149 +1779,34 @@
             renderRefs();
             input.value = '';
             autoGrow(input);
-            if(!currentConversation){
-                currentConversation = {id:'', title:'新对话', messages:[]};
-                document.getElementById('messages').innerHTML = '';
-            }
-            addMessageBubble({role:'user', content:message, attachments:pendingRefs});
-            const useStreaming = mode !== 'image';
-            const pendingText = mode === 'image' ? tr('chat.generatingImage') : (useStreaming ? '' : (mode === 'agent' ? tr('chat.agentWorking') : ''));
-            const assistantBubble = addMessageBubble({role:'assistant', content: pendingText});
-            if(useStreaming || mode === 'agent') assistantBubble.bubble.classList.add('streaming');
-            scrollBottom();
+            const clientRequestId = uuid();
+            const previousConversation = currentConversation ? {...currentConversation, messages:[...(currentConversation.messages || [])]} : null;
             try {
-                if(useStreaming) {
-                    await streamChatMessage(message, pendingRefs, assistantBubble);
-                } else if(mode === 'chat') {
-                    const data = await fetch('/api/chat', {
-                        method:'POST',
-                        headers:headers(),
-                        body:JSON.stringify({
-                            conversation_id: currentConversation.id || '',
-                            message,
-                            system_prompt: currentSystemPrompt(),
-                            mode:'chat',
-                            size: requestedSize,
-                            model: provider === 'modelscope' ? (msModel || activeChatModel) : (activeChatModel || config.chat_model),
-                            ms_model: provider === 'modelscope' ? (msModel || activeChatModel) : '',
-                            reference_images: pendingRefs,
-                            provider,
-                        })
-                    }).then(async r => { if(!r.ok) throw new Error((await r.json()).detail || tr('chat.requestFailed')); return r.json(); });
-                    currentConversation = data.conversation;
-                    rememberConversation(currentConversation.id);
-                    setChatTitle(currentConversation.title);
-                    renderMessages(currentConversation.messages || []);
-                    await loadConversations();
-                } else if(mode === 'agent') {
-                    const data = await fetch('/api/chat/agent', {
-                        method:'POST',
-                        headers:headers(),
-                        body:JSON.stringify({
-                            conversation_id: currentConversation.id || '',
-                            message,
-                            system_prompt: currentSystemPrompt(),
-                            mode:'agent',
-                            size: requestedSize,
-                            model: provider === 'modelscope' ? (msModel || activeChatModel) : (activeChatModel || config.chat_model),
-                            ms_model: provider === 'modelscope' ? (msModel || activeChatModel) : '',
-                            image_model: activeImageModel || config.image_model,
-                            reference_images: pendingRefs,
-                            provider,
-                            image_provider: activeImageProvider,
-                        })
-                    }).then(async r => { if(!r.ok) throw new Error((await r.json()).detail || tr('chat.requestFailed')); return r.json(); });
-                    currentConversation = data.conversation;
-                    rememberConversation(currentConversation.id);
-                    setChatTitle(currentConversation.title);
-                    renderMessages(currentConversation.messages || []);
-                    await loadConversations();
-                } else {
-                    const data = await fetch('/api/chat', {
-                        method:'POST',
-                        headers:headers(),
-                        body:JSON.stringify({
-                            conversation_id: currentConversation.id || '',
-                            message,
-                            system_prompt: currentSystemPrompt(),
-                            mode,
-                            size: requestedSize,
-                            model: activeChatModel || config.chat_model,
-                            image_model: activeImageModel || config.image_model,
-                            reference_images: pendingRefs,
-                            provider: activeImageProvider,
-                        })
-                    }).then(async r => { if(!r.ok) throw new Error((await r.json()).detail || tr('chat.requestFailed')); return r.json(); });
-                    currentConversation = data.conversation;
-                    rememberConversation(currentConversation.id);
-                    setChatTitle(currentConversation.title);
-                    renderMessages(currentConversation.messages || []);
-                    await loadConversations();
-                }
+                const response = await fetch('/api/chat/runs', {method:'POST', headers:headers(), body:JSON.stringify(chatRunPayload(message, pendingRefs, requestedSize, clientRequestId))});
+                const data = await response.json();
+                if(!response.ok) throw new Error(data.detail || tr('chat.requestFailed'));
+                const serverMessages = data.conversation?.messages || previousConversation?.messages || [];
+                currentConversation = data.conversation;
+                currentConversation.messages = [...serverMessages, {id:`pending-${clientRequestId}`, role:'user', content:message, attachments:pendingRefs, created_at:Date.now(), mode}];
+                runStates.set(data.run.id, data.run);
+                rememberConversation(currentConversation.id);
+                setChatTitle(currentConversation.title);
+                lastRenderedRunSignature = '';
+                renderThreads();
+                renderCurrentRunState();
+                await loadConversations();
+                scheduleRunPolling();
             } catch(err) {
-                renderMessages([...(currentConversation.messages || []), {role:'assistant', content:err.message || tr('chat.requestFailed')}]);
+                input.value = message;
+                refs = [...pendingRefs, ...refs];
+                renderRefs();
+                if(previousConversation) currentConversation = previousConversation;
+                renderMessages([...(currentConversation?.messages || []), {role:'assistant', content:err.message || tr('chat.requestFailed')}]);
             } finally {
                 btn.disabled = false;
+                updateComposerState();
                 scrollBottom();
             }
-        }
-
-        async function streamChatMessage(message, pendingRefs, assistantBubble){
-            const currentProvider = provider;
-            const currentMsModel = provider === 'modelscope' ? (msModel || activeChatModel || (config.ms_chat_models?.[0] || '')) : '';
-            const currentChatModel = activeChatModel || config.chat_model;
-
-            const res = await fetch('/api/chat/stream', {
-                method:'POST',
-                headers:headers(),
-                body:JSON.stringify({
-                    conversation_id: currentConversation.id || '',
-                    message,
-                    system_prompt: currentSystemPrompt(),
-                    mode:'chat',
-                    model: currentProvider === 'modelscope' ? currentMsModel : currentChatModel,
-                    ms_model: currentProvider === 'modelscope' ? currentMsModel : '',
-                    provider: currentProvider,
-                    reference_images: pendingRefs
-                })
-            });
-            if(!res.ok) throw new Error((await res.json()).detail || tr('chat.requestFailed'));
-            const reader = res.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-            let fullText = '';
-            while(true){
-                const {value, done} = await reader.read();
-                if(done) break;
-                buffer += decoder.decode(value, {stream:true});
-                const events = buffer.split('\n\n');
-                buffer = events.pop() || '';
-                for(const eventText of events){
-                    const line = eventText.split('\n').find(item => item.startsWith('data:'));
-                    if(!line) continue;
-                    const event = JSON.parse(line.slice(5).trim());
-                    if(event.type === 'meta'){
-                        currentConversation = event.conversation;
-                        rememberConversation(currentConversation.id);
-                        setChatTitle(currentConversation.title);
-                    }
-                    if(event.type === 'delta'){
-                        fullText += event.delta || '';
-                        assistantBubble.text.textContent = fullText;
-                        scrollBottom();
-                    }
-                    if(event.type === 'error') throw new Error(event.detail || tr('chat.requestFailed'));
-                    if(event.type === 'done'){
-                        assistantBubble.bubble.classList.remove('streaming');
-                        currentConversation = event.conversation;
-                        rememberConversation(currentConversation.id);
-                        setChatTitle(currentConversation.title);
-                        renderMessages(currentConversation.messages || []);
-                        await loadConversations();
-                    }
-                }
-            }
-            assistantBubble.bubble.classList.remove('streaming');
         }
 
         function scrollBottom(){ requestAnimationFrame(() => { const box = document.getElementById('messages'); box.scrollTop = box.scrollHeight; }); }
@@ -1650,7 +1818,9 @@
             setChatRatio(chatRatio);
             setChatResolution(chatResolution);
             await loadConfig();
+            await loadRuns();
             await loadConversations();
+            updateComposerState();
             updateComposerOverflow();
         };
     </script>

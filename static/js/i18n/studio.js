@@ -116,7 +116,7 @@
         "chat.agentWorking": { zh: "正在判断并调用合适的工具...", en: "Choosing the right tool..." },
         "chat.requestFailed": { zh: "请求失败", en: "Request failed" },
         "chat.chatMode": { zh: "聊天", en: "Chat" },
-        "chat.agentMode": { zh: "Agent", en: "Agent" },
+        "chat.agentMode": { zh: "智能助手", en: "Agent" },
         "chat.imageMode": { zh: "生图", en: "Image" },
         "chat.resolution": { zh: "分辨率", en: "Resolution" },
     });
