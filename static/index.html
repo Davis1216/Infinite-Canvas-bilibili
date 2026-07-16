@@ -1426,6 +1426,14 @@
                     </svg>
                     <span class="nav-text" data-i18n="nav.gpt">头脑风暴</span>
                 </div>
+                <div class="nav-item" onclick="switchUI(this, 'knowledge-base')">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                        <path d="M8 7h8M8 11h6"></path>
+                    </svg>
+                    <span class="nav-text" data-i18n="nav.knowledgeBase">知识库</span>
+                </div>
                 <div class="nav-item" onclick="switchUI(this, 'usage-dashboard')">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M3 3v18h18"></path>
@@ -1561,7 +1569,8 @@
             <iframe id="frame-klein" data-src="/static/klein.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
             <iframe id="frame-angle" data-src="/static/angle.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
             <iframe id="frame-online" data-src="/static/online.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
-            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.07.4.2.1784105326" scrolling="yes"></iframe>
+            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.07.4.2.1784188772" scrolling="yes"></iframe>
+            <iframe id="frame-knowledge-base" data-src="/static/knowledge-base.html?v=2026.07.4.2.1784193888" scrolling="yes"></iframe>
             <iframe id="frame-usage-dashboard" data-src="/static/usage-dashboard.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
             <iframe id="frame-inspiration-space" data-src="/static/inspiration-space.html?v=2026.07.4.2.1784037058" scrolling="yes"></iframe>
             <iframe id="frame-asset-manager" data-src="/static/asset-manager.html?v=2026.07.4.2.1784108526" scrolling="yes"></iframe>
@@ -1676,7 +1685,7 @@
         const SIDEBAR_SETTINGS_COLLAPSED_KEY = 'studio_sidebar_settings_collapsed';
         const SIDEBAR_PINNED_KEY = 'studio_sidebar_pinned';
         const DEFAULT_PAGE_ID = 'online';
-        const PAGE_IDS = ['zimage','enhance','klein','angle','online','gpt-chat','usage-dashboard','inspiration-space','canvas','asset-manager','api-settings','comfyui-settings'];
+        const PAGE_IDS = ['zimage','enhance','klein','angle','online','gpt-chat','knowledge-base','usage-dashboard','inspiration-space','canvas','asset-manager','api-settings','comfyui-settings'];
         const LOCAL_PAGE_IDS = ['zimage','enhance','klein','angle'];
         const PROJECT_URL = 'https://github.com/hero8152/Infinite-Canvas';
         let appInfo = { version:'', repo_url:PROJECT_URL, version_url:'https://raw.githubusercontent.com/hero8152/Infinite-Canvas/main/VERSION' };

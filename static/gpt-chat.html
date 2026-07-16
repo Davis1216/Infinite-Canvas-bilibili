@@ -612,6 +612,12 @@
         .jinni-capabilities { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
         .jinni-capability { min-height:54px; padding:9px; display:flex; align-items:center; gap:8px; border:1px solid var(--chat-line); border-radius:11px; background:var(--chat-bg); color:var(--chat-text); font-size:10px; font-weight:850; }
         .jinni-capability input { width:16px; height:16px; }
+        .jinni-kb-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+        .jinni-kb-option { min-height:46px; padding:9px 10px; display:flex; align-items:center; gap:8px; border:1px solid var(--chat-line); border-radius:10px; background:var(--chat-bg); color:var(--chat-text); font-size:10px; font-weight:850; }
+        .jinni-kb-option input { width:16px; height:16px; }
+        .jinni-kb-option span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .knowledge-mode-select { display:none; height:34px; max-width:142px; padding:0 28px 0 9px; border:1px solid var(--chat-line); border-radius:10px; outline:0; background:var(--chat-panel-2); color:var(--chat-text); font-size:9.5px; font-weight:850; }
+        .knowledge-mode-select.visible { display:block; }
         .jinni-knowledge-row { padding:7px 9px; border:1px solid var(--chat-line); border-radius:10px; background:var(--chat-bg); }
         .jinni-knowledge-row i,.jinni-knowledge-row svg { width:15px; height:15px; color:var(--chat-muted); }
         .jinni-knowledge-name { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--chat-text); font-size:10px; font-weight:850; }
@@ -650,6 +656,7 @@
             .jinni-form { padding:14px; grid-template-columns:1fr; }
             .jinni-field.wide { grid-column:1; }
             .jinni-capabilities { grid-template-columns:1fr; }
+            .jinni-kb-list { grid-template-columns:1fr; }
             .jinni-starter-chips { grid-template-columns:1fr; }
             .jinni-editor-head { align-items:flex-start; flex-direction:column; }
         }
@@ -720,6 +727,7 @@
                                         <input id="attachmentInput" class="file-input" type="file" multiple onchange="uploadFiles(this.files); this.value='';">
                                         <i data-lucide="paperclip"></i>
                                     </label>
+                                    <select id="knowledgeModeSelect" class="knowledge-mode-select" title="Jinni 知识模式" onchange="setConversationKnowledgeMode(this.value)"></select>
                                     <div id="modelPicker" class="model-picker">
                                         <button id="modelPickerBtn" class="model-picker-button" onclick="event.stopPropagation();toggleModelPicker()" title="选择平台和模型">
                                             <i data-lucide="boxes"></i>
@@ -931,6 +939,7 @@
         let refs = [];
         let config = { chat_model: 'gpt-5.5', image_model: 'gpt-image-2', ms_chat_models: [] };
         let jinnis = [];
+        let knowledgeBases = [];
         let jinniWorkspaceMode = 'chat';
         let editingJinni = null;
         let editingKnowledgeFiles = [];
@@ -1002,6 +1011,15 @@
             }
         }
 
+        async function loadKnowledgeBases(){
+            try {
+                const response = await fetch('/api/knowledge-bases', {headers:{'X-User-ID':userId}});
+                const data = await response.json();
+                if(!response.ok) throw new Error(data.detail || '加载知识库失败');
+                knowledgeBases = data.knowledge_bases || [];
+            } catch(e) { knowledgeBases = []; }
+        }
+
         function renderJinniQuickList(){
             const list = document.getElementById('jinniQuickList');
             if(!list) return;
@@ -1018,6 +1036,7 @@
             if(item.capabilities?.generate_image) tags.push('生图');
             if(item.capabilities?.edit_image) tags.push('改图');
             if(item.knowledge_files?.length) tags.push(`${item.knowledge_files.length} 份知识`);
+            if(item.knowledge_base_ids?.length) tags.push(`${item.knowledge_base_ids.length} 个知识库`);
             return tags.map(tag => `<span class="jinni-tag">${escapeHtml(tag)}</span>`).join('');
         }
 
@@ -1081,7 +1100,9 @@
                 chat_model:chatProviders().find(item => item.id === defaultChatProvider)?.chat_models?.[0] || config.chat_model || '',
                 image_provider_id:defaultImageProvider,
                 image_model:imageProviders().find(item => item.id === defaultImageProvider)?.image_models?.[0] || config.image_model || '',
-                capabilities:{chat:true,generate_image:false,edit_image:false}, knowledge_files:[]
+                capabilities:{chat:true,generate_image:false,edit_image:false}, knowledge_files:[],
+                knowledge_capabilities:{augment:false,strict:false,maintain:false}, knowledge_base_ids:[],
+                strict_knowledge_base_id:'', default_knowledge_mode:'none'
             };
             editingKnowledgeFiles = [...(editingJinni.knowledge_files || [])];
             jinniWorkspaceMode = 'editor';
@@ -1108,7 +1129,11 @@
                     <div class="jinni-field"><label for="jinniImageProvider">图像平台</label><select id="jinniImageProvider" onchange="refreshJinniImageModels()">${jinniProviderOptions('image',editingJinni.image_provider_id)}</select></div>
                     <div class="jinni-field"><label for="jinniImageModel">默认图像模型</label><select id="jinniImageModel">${jinniModelOptions('image',editingJinni.image_provider_id,editingJinni.image_model)}</select></div>
                     <div class="jinni-field wide"><span class="jinni-section-label">能力</span><div class="jinni-capabilities"><label class="jinni-capability"><input type="checkbox" checked disabled><span>聊天</span></label><label class="jinni-capability"><input id="jinniCanGenerate" type="checkbox" ${editingJinni.capabilities?.generate_image ? 'checked' : ''}><span>生成图片</span></label><label class="jinni-capability"><input id="jinniCanEdit" type="checkbox" ${editingJinni.capabilities?.edit_image ? 'checked' : ''}><span>编辑图片</span></label></div></div>
-                    <div class="jinni-field wide"><label>知识文件</label><div id="jinniKnowledgeList" class="jinni-knowledge-list">${renderEditingKnowledge()}</div><input id="jinniKnowledgeInput" type="file" multiple hidden accept=".pdf,.txt,.md,.markdown,.json,.csv,.log,.py,.js,.ts,.tsx,.jsx,.html,.css,.xml,.yaml,.yml,.docx,.xlsx" onchange="uploadJinniKnowledge(this.files);this.value='' "><button type="button" class="jinni-add-row" onclick="document.getElementById('jinniKnowledgeInput').click()"><i data-lucide="paperclip"></i><span>添加知识文件</span></button><small>最多 20 份、单份不超过 50MB；旧版 DOC/XLS 和 ZIP 请先转换格式。</small></div>
+                    <div class="jinni-field wide"><span class="jinni-section-label">知识库能力</span><div class="jinni-capabilities"><label class="jinni-capability"><input id="jinniKbAugment" type="checkbox" ${editingJinni.knowledge_capabilities?.augment ? 'checked' : ''}><span>结合知识库回答</span></label><label class="jinni-capability"><input id="jinniKbStrict" type="checkbox" ${editingJinni.knowledge_capabilities?.strict ? 'checked' : ''}><span>仅知识库回答</span></label><label class="jinni-capability"><input id="jinniKbMaintain" type="checkbox" ${editingJinni.knowledge_capabilities?.maintain ? 'checked' : ''}><span>知识维护</span></label></div><small>能力彼此独立；会话中只能在这里授权的模式之间切换。</small></div>
+                    <div class="jinni-field wide"><label>绑定知识库</label><div class="jinni-kb-list">${knowledgeBases.length ? knowledgeBases.map(item => `<label class="jinni-kb-option"><input type="checkbox" name="jinniKnowledgeBase" value="${escapeHtml(item.id)}" ${(editingJinni.knowledge_base_ids||[]).includes(item.id)?'checked':''}><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span></label>`).join('') : '<div class="thread-empty">还没有独立知识库，请先从主导航“知识库”创建。</div>'}</div></div>
+                    <div class="jinni-field"><label for="jinniStrictKnowledgeBase">严格回答知识库</label><select id="jinniStrictKnowledgeBase"><option value="">请选择一个知识库</option>${knowledgeBases.map(item => `<option value="${escapeHtml(item.id)}" ${editingJinni.strict_knowledge_base_id===item.id?'selected':''}>${escapeHtml(item.name)}</option>`).join('')}</select></div>
+                    <div class="jinni-field"><label for="jinniDefaultKnowledgeMode">默认知识模式</label><select id="jinniDefaultKnowledgeMode"><option value="none" ${editingJinni.default_knowledge_mode==='none'?'selected':''}>不使用知识库</option><option value="augment" ${editingJinni.default_knowledge_mode==='augment'?'selected':''}>结合知识库回答</option><option value="strict" ${editingJinni.default_knowledge_mode==='strict'?'selected':''}>仅知识库回答</option><option value="maintain" ${editingJinni.default_knowledge_mode==='maintain'?'selected':''}>知识维护</option></select></div>
+                    <div class="jinni-field wide"><label>旧版知识文件（兼容）</label><div id="jinniKnowledgeList" class="jinni-knowledge-list">${renderEditingKnowledge()}</div><input id="jinniKnowledgeInput" type="file" multiple hidden accept=".pdf,.txt,.md,.markdown,.json,.csv,.log,.py,.js,.ts,.tsx,.jsx,.html,.css,.xml,.yaml,.yml,.docx,.xlsx" onchange="uploadJinniKnowledge(this.files);this.value='' "><button type="button" class="jinni-add-row" onclick="document.getElementById('jinniKnowledgeInput').click()"><i data-lucide="paperclip"></i><span>添加旧版知识文件</span></button><small>为历史 Jinni 保留；新知识建议统一放入独立知识库。</small></div>
                     <div id="jinniFormError" class="jinni-form-error"></div>
                 </form>
             </div>`;
@@ -1132,6 +1157,10 @@
                 image_model:document.getElementById('jinniImageModel')?.value || '',
                 capabilities:{chat:true,generate_image:!!document.getElementById('jinniCanGenerate')?.checked,edit_image:!!document.getElementById('jinniCanEdit')?.checked},
                 knowledge_files:editingKnowledgeFiles,
+                knowledge_capabilities:{augment:!!document.getElementById('jinniKbAugment')?.checked,strict:!!document.getElementById('jinniKbStrict')?.checked,maintain:!!document.getElementById('jinniKbMaintain')?.checked},
+                knowledge_base_ids:[...document.querySelectorAll('input[name="jinniKnowledgeBase"]:checked')].map(input=>input.value),
+                strict_knowledge_base_id:document.getElementById('jinniStrictKnowledgeBase')?.value || '',
+                default_knowledge_mode:document.getElementById('jinniDefaultKnowledgeMode')?.value || 'none',
             };
         }
 
@@ -1143,6 +1172,8 @@
         async function saveJinni(){
             const draft = collectJinniDraft();
             if(!draft.name || !draft.instructions){ setJinniFormError('请填写 Jinni 名称和指令。'); return; }
+            if(draft.knowledge_capabilities.strict && !draft.strict_knowledge_base_id){ setJinniFormError('启用仅知识库回答时，请选择严格回答知识库。'); return; }
+            if(draft.strict_knowledge_base_id && !draft.knowledge_base_ids.includes(draft.strict_knowledge_base_id)) draft.knowledge_base_ids.push(draft.strict_knowledge_base_id);
             setJinniFormError('');
             try {
                 const id = editingJinni?.id;
@@ -1297,6 +1328,26 @@
             setMode(mode,false);
             updateWorkspaceChrome();
             updateModelLabel();
+            updateKnowledgeModeControl();
+        }
+
+        function updateKnowledgeModeControl(){
+            const select = document.getElementById('knowledgeModeSelect');
+            if(!select) return;
+            const snapshot = currentJinniSnapshot();
+            const capabilities = snapshot?.knowledge_capabilities || {};
+            const options = [['none','不使用知识库'],['augment','结合知识'],['strict','仅知识库'],['maintain','知识维护']].filter(([value]) => value === 'none' || capabilities[value]);
+            select.innerHTML = options.map(([value,label]) => `<option value="${value}" ${value===(currentConversation?.knowledge_mode||snapshot?.default_knowledge_mode||'none')?'selected':''}>${label}</option>`).join('');
+            select.classList.toggle('visible', !!snapshot && options.length > 1);
+        }
+
+        async function setConversationKnowledgeMode(next){
+            if(!currentConversation?.id || !currentJinniSnapshot()) return;
+            const response = await fetch(`/api/conversations/${currentConversation.id}`, {method:'PATCH',headers:headers(),body:JSON.stringify({knowledge_mode:next})});
+            const data = await response.json();
+            if(!response.ok){ alert(data.detail || '切换知识模式失败'); updateKnowledgeModeControl(); return; }
+            currentConversation = data.conversation;
+            updateKnowledgeModeControl();
         }
 
         function restoreGlobalChatSettings(){
@@ -2422,7 +2473,7 @@
             setChatRatio(chatRatio);
             setChatResolution(chatResolution);
             await loadConfig();
-            await loadJinnis();
+            await Promise.all([loadJinnis(), loadKnowledgeBases()]);
             await loadRuns();
             await loadConversations();
             updateComposerState();

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="icon" href="/static/images/logo.png" type="image/png">
+    <title>知识库</title>
+    <script>
+        try { if((localStorage.getItem('studio_theme')||'light')==='dark') document.documentElement.classList.add('theme-dark'); } catch(e) {}
+    </script>
+    <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
+    <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
+    <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
+    <link rel="stylesheet" href="/static/css/knowledge-base.css?v=2026.07.4.2.1784193207">
+</head>
+<body>
+    <main class="kb-page">
+        <header class="kb-head">
+            <div><span class="kb-kicker">Jinni Knowledge</span><h1>知识库</h1><p>沉淀可靠资料，通过混合检索为 Jinni 提供可引用的知识。</p></div>
+            <div class="kb-head-actions"><span id="kbStatus" class="kb-status">准备就绪</span><button class="kb-btn" onclick="openEmbeddingDialog()"><i data-lucide="cpu"></i>嵌入配置</button><button class="kb-btn primary" onclick="openCreateDialog()"><i data-lucide="plus"></i>新建知识库</button></div>
+        </header>
+        <section class="kb-shell">
+            <aside class="kb-sidebar">
+                <label class="kb-search"><i data-lucide="search"></i><input id="kbFilter" type="search" placeholder="搜索知识库" oninput="filterKnowledgeBases(this.value)"></label>
+                <div id="kbList" class="kb-list"></div>
+                <div class="kb-side-note"><i data-lucide="hard-drive"></i><span>文档、任务和语义向量都保存在本机，无需连接外部向量数据库。</span></div>
+            </aside>
+            <section id="kbWorkspace" class="kb-workspace"></section>
+        </section>
+    </main>
+    <input id="kbFileInput" type="file" multiple hidden accept=".pdf,.txt,.md,.markdown,.json,.csv,.log,.py,.js,.ts,.tsx,.jsx,.html,.css,.xml,.yaml,.yml,.docx,.xlsx" onchange="uploadKnowledgeFiles(this.files);this.value=''">
+    <div id="kbModal" class="kb-modal" hidden onclick="if(event.target===this)closeModal()"><div id="kbModalPanel" class="kb-modal-panel"></div></div>
+    <script src="/static/js/knowledge-base.js?v=2026.07.4.2.1784193188"></script>
+</body>
+</html>

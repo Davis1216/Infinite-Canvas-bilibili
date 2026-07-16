@@ -6,3 +6,4 @@ python-multipart
 httpx
 pillow
 pypdf
+lancedb==0.34.0

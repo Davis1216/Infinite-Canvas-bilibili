@@ -39,6 +39,18 @@ from fastapi.responses import FileResponse, Response, StreamingResponse, JSONRes
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 
+# Windows embeddable Python uses python310._pth isolation and does not add the
+# launched script's directory to sys.path. Register the project root explicitly
+# before importing sibling application packages such as knowledge_base.
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from knowledge_base import router as knowledge_base_router, start_runtime as start_knowledge_runtime, stop_runtime as stop_knowledge_runtime
+from knowledge_base.answering import build_knowledge_prompt
+from knowledge_base.repositories import get_repository as get_knowledge_repository
+from knowledge_base.retrieval import RetrievalService as KnowledgeRetrievalService
+
 try:
     from pypdf import PdfReader
 except ImportError:
@@ -73,6 +85,7 @@ class QuietAccessLogFilter(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(QuietAccessLogFilter())
 
 app = FastAPI()
+app.include_router(knowledge_base_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -187,6 +200,7 @@ MODELSCOPE_TREE_URL = "https://www.modelscope.ai/api/v1/studio/daniel8152/Infini
 async def startup_event():
     global GLOBAL_LOOP
     GLOBAL_LOOP = asyncio.get_running_loop()
+    start_knowledge_runtime()
     sync_static_html_versions()
     # 启动时整理资产库：给所有图片分组（含默认角色/场景）建好文件夹，并把根目录里的旧素材归整进去。
     try:
@@ -203,6 +217,10 @@ async def startup_event():
         await asyncio.to_thread(migrate_mislabeled_image_extensions)
     except Exception as exc:
         print(f"纠正图片扩展名失败: {exc}")
+
+@app.on_event("shutdown")
+async def shutdown_knowledge_base():
+    stop_knowledge_runtime()
 
 @app.websocket("/ws/stats")
 async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
@@ -2391,6 +2409,10 @@ class JinniCreateRequest(BaseModel):
     image_model: str = ""
     capabilities: Dict[str, bool] = {}
     knowledge_files: List[AIReference] = []
+    knowledge_capabilities: Dict[str, bool] = {}
+    knowledge_base_ids: List[str] = []
+    strict_knowledge_base_id: str = ""
+    default_knowledge_mode: str = "none"
 
 class JinniUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, max_length=80)
@@ -2404,6 +2426,10 @@ class JinniUpdateRequest(BaseModel):
     image_model: Optional[str] = None
     capabilities: Optional[Dict[str, bool]] = None
     knowledge_files: Optional[List[AIReference]] = None
+    knowledge_capabilities: Optional[Dict[str, bool]] = None
+    knowledge_base_ids: Optional[List[str]] = None
+    strict_knowledge_base_id: Optional[str] = None
+    default_knowledge_mode: Optional[str] = None
 
 class OnlineImageRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=ONLINE_IMAGE_PROMPT_MAX_LENGTH)
@@ -2596,6 +2622,8 @@ class ConversationUpdateRequest(BaseModel):
     pinned: Optional[bool] = None
     runtime_provider_id: Optional[str] = None
     runtime_model: Optional[str] = None
+    knowledge_mode: Optional[str] = None
+    strict_knowledge_base_id: Optional[str] = None
 
 class CanvasCreateRequest(BaseModel):
     title: str = "未命名画布"
@@ -4001,6 +4029,57 @@ def normalize_jinni_payload(raw, existing=None):
         if len(knowledge) > JINNI_KNOWLEDGE_MAX:
             raise HTTPException(status_code=400, detail=f"每个 Jinni 最多保存 {JINNI_KNOWLEDGE_MAX} 份知识文件")
     data["knowledge_files"] = knowledge
+
+    knowledge_capabilities = data.get("knowledge_capabilities") if isinstance(data.get("knowledge_capabilities"), dict) else {}
+    data["knowledge_capabilities"] = {
+        "augment": bool(knowledge_capabilities.get("augment", False)),
+        "strict": bool(knowledge_capabilities.get("strict", False)),
+        "maintain": bool(knowledge_capabilities.get("maintain", False)),
+    }
+    knowledge_base_ids = []
+    for value in data.get("knowledge_base_ids") or []:
+        clean = re.sub(r"[^a-zA-Z0-9_-]", "", str(value or ""))
+        if clean and clean not in knowledge_base_ids:
+            knowledge_base_ids.append(clean)
+    data["knowledge_base_ids"] = knowledge_base_ids[:100]
+    strict_id = re.sub(r"[^a-zA-Z0-9_-]", "", str(data.get("strict_knowledge_base_id") or ""))
+    data["strict_knowledge_base_id"] = strict_id
+    allowed_modes = {"none", "augment", "strict", "maintain"}
+    mode = str(data.get("default_knowledge_mode") or "none").strip().lower()
+    data["default_knowledge_mode"] = mode if mode in allowed_modes else "none"
+    return data
+
+def validate_jinni_knowledge(user_id, data, allow_missing=False):
+    repository = get_knowledge_repository()
+    allowed_ids = []
+    for knowledge_base_id in data.get("knowledge_base_ids") or []:
+        if not repository.get_knowledge_base(user_id, knowledge_base_id):
+            if allow_missing:
+                continue
+            raise HTTPException(status_code=400, detail="选择的知识库不存在或不属于当前用户")
+        allowed_ids.append(knowledge_base_id)
+    strict_id = data.get("strict_knowledge_base_id") or ""
+    if strict_id and strict_id not in allowed_ids:
+        if not repository.get_knowledge_base(user_id, strict_id):
+            if allow_missing:
+                strict_id = ""
+                data["strict_knowledge_base_id"] = ""
+            else:
+                raise HTTPException(status_code=400, detail="严格回答知识库不存在或不属于当前用户")
+        if strict_id:
+            allowed_ids.append(strict_id)
+    capabilities = data.get("knowledge_capabilities") or {}
+    mode = data.get("default_knowledge_mode") or "none"
+    if mode != "none" and not capabilities.get(mode):
+        raise HTTPException(status_code=400, detail="默认知识模式尚未启用")
+    if capabilities.get("strict") and not strict_id:
+        if allow_missing:
+            capabilities["strict"] = False
+            if mode == "strict":
+                data["default_knowledge_mode"] = "none"
+        else:
+            raise HTTPException(status_code=400, detail="启用仅知识库回答时必须选择一个严格回答知识库")
+    data["knowledge_base_ids"] = allowed_ids
     return data
 
 def save_jinni(user_id, jinni):
@@ -4011,11 +4090,14 @@ def save_jinni(user_id, jinni):
         with open(temp_path, "w", encoding="utf-8") as f:
             json.dump(jinni, f, ensure_ascii=False, indent=2)
         os.replace(temp_path, path)
+    get_knowledge_repository().replace_jinni_bindings(
+        user_id, jinni["id"], jinni.get("knowledge_base_ids") or [], jinni.get("knowledge_capabilities") or {}
+    )
     return jinni
 
 def new_jinni(user_id, payload):
     timestamp = now_ms()
-    data = normalize_jinni_payload(payload)
+    data = validate_jinni_knowledge(user_id, normalize_jinni_payload(payload))
     data.update({
         "id": uuid.uuid4().hex,
         "created_at": timestamp,
@@ -4053,7 +4135,7 @@ def list_jinnis(user_id, query=""):
 
 def update_jinni(user_id, jinni_id, payload):
     current = load_jinni(user_id, jinni_id)
-    data = normalize_jinni_payload(payload, current)
+    data = validate_jinni_knowledge(user_id, normalize_jinni_payload(payload, current), allow_missing=True)
     data["id"] = current["id"]
     data["created_at"] = current.get("created_at") or now_ms()
     data["last_used_at"] = current.get("last_used_at") or 0
@@ -4066,7 +4148,8 @@ def jinni_snapshot(jinni):
         for key in (
             "id", "name", "avatar_url", "description", "instructions", "starters",
             "provider_id", "chat_model", "image_provider_id", "image_model",
-            "capabilities", "knowledge_files", "updated_at",
+            "capabilities", "knowledge_files", "knowledge_capabilities", "knowledge_base_ids",
+            "strict_knowledge_base_id", "default_knowledge_mode", "updated_at",
         )
     }
 
@@ -4076,6 +4159,15 @@ def new_jinni_conversation(user_id, jinni):
     conversation["jinni_snapshot"] = jinni_snapshot(jinni)
     conversation["runtime_provider_id"] = jinni.get("provider_id") or ""
     conversation["runtime_model"] = jinni.get("chat_model") or ""
+    conversation["knowledge_mode"] = jinni.get("default_knowledge_mode") or "none"
+    conversation["strict_knowledge_base_id"] = jinni.get("strict_knowledge_base_id") or ""
+    repository = get_knowledge_repository()
+    generations = {}
+    for knowledge_base_id in jinni.get("knowledge_base_ids") or []:
+        item = repository.get_knowledge_base(user_id, knowledge_base_id)
+        if item:
+            generations[knowledge_base_id] = int(item.get("active_generation") or 1)
+    conversation["knowledge_generations"] = generations
     conversation["updated_at"] = now_ms()
     save_conversation(user_id, conversation)
     jinni["last_used_at"] = now_ms()
@@ -4141,7 +4233,8 @@ def load_conversation(user_id, conversation_id):
             raise HTTPException(status_code=404, detail="对话不存在")
         return _read_conversation_unlocked(path)
 
-def update_conversation(user_id, conversation_id, title=None, pinned=None, runtime_provider_id=None, runtime_model=None):
+def update_conversation(user_id, conversation_id, title=None, pinned=None, runtime_provider_id=None, runtime_model=None,
+                        knowledge_mode=None, strict_knowledge_base_id=None):
     path = conversation_path(user_id, conversation_id)
     with CONVERSATION_LOCK:
         if not os.path.exists(path):
@@ -4166,6 +4259,23 @@ def update_conversation(user_id, conversation_id, title=None, pinned=None, runti
             if runtime_model is not None:
                 data["runtime_model"] = str(runtime_model or "").strip()[:240]
                 data["runtime_model_updated_at"] = timestamp
+        if knowledge_mode is not None or strict_knowledge_base_id is not None:
+            snapshot = data.get("jinni_snapshot") if isinstance(data.get("jinni_snapshot"), dict) else None
+            if not snapshot:
+                raise HTTPException(status_code=400, detail="普通对话不支持 Jinni 知识模式")
+            capabilities = snapshot.get("knowledge_capabilities") or {}
+            if knowledge_mode is not None:
+                mode = str(knowledge_mode or "none").lower()
+                if mode not in {"none", "augment", "strict", "maintain"}:
+                    raise HTTPException(status_code=400, detail="无效的知识模式")
+                if mode != "none" and not capabilities.get(mode):
+                    raise HTTPException(status_code=403, detail="当前 Jinni 未启用该知识能力")
+                data["knowledge_mode"] = mode
+            if strict_knowledge_base_id is not None:
+                strict_id = str(strict_knowledge_base_id or "")
+                if strict_id and strict_id not in (snapshot.get("knowledge_base_ids") or []):
+                    raise HTTPException(status_code=403, detail="当前 Jinni 未绑定该知识库")
+                data["strict_knowledge_base_id"] = strict_id
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     return data
@@ -8423,12 +8533,31 @@ def jinni_system_prompt(snapshot):
         + "\n\n---\n\n".join(knowledge_parts)
     )
 
-def prepare_jinni_chat_payload(payload, conversation, include_knowledge=True):
+def prepare_jinni_chat_payload(payload, conversation, include_knowledge=True, user_id=""):
     snapshot = conversation.get("jinni_snapshot") if isinstance(conversation, dict) else None
     if not isinstance(snapshot, dict):
         return payload
     capabilities = snapshot.get("capabilities") if isinstance(snapshot.get("capabilities"), dict) else {}
-    payload.system_prompt = jinni_system_prompt(snapshot) if include_knowledge else str(snapshot.get("instructions") or SYSTEM_PROMPT)
+    base_prompt = jinni_system_prompt(snapshot) if include_knowledge else str(snapshot.get("instructions") or SYSTEM_PROMPT)
+    knowledge_mode = str(conversation.get("knowledge_mode") or snapshot.get("default_knowledge_mode") or "none")
+    knowledge_capabilities = snapshot.get("knowledge_capabilities") if isinstance(snapshot.get("knowledge_capabilities"), dict) else {}
+    if knowledge_mode in {"augment", "strict", "maintain"} and knowledge_capabilities.get(knowledge_mode) and user_id:
+        knowledge_base_ids = list(snapshot.get("knowledge_base_ids") or [])
+        if knowledge_mode == "strict":
+            strict_id = str(conversation.get("strict_knowledge_base_id") or snapshot.get("strict_knowledge_base_id") or "")
+            knowledge_base_ids = [strict_id] if strict_id in knowledge_base_ids else []
+        context = KnowledgeRetrievalService().retrieve(
+            user_id, knowledge_base_ids, str(getattr(payload, "message", "") or ""),
+            generations=conversation.get("knowledge_generations") or None,
+        )
+        base_prompt = build_knowledge_prompt(str(snapshot.get("instructions") or SYSTEM_PROMPT), knowledge_mode, context)
+        conversation["last_knowledge_retrieval"] = {
+            "query": context.query,
+            "grounded": context.grounded,
+            "citations": [item.model_dump() if hasattr(item, "model_dump") else item.dict() for item in context.citations],
+            "mode": knowledge_mode,
+        }
+    payload.system_prompt = base_prompt
     payload.provider = str(conversation.get("runtime_provider_id") or snapshot.get("provider_id") or payload.provider).strip()
     payload.model = str(conversation.get("runtime_model") or snapshot.get("chat_model") or payload.model).strip()
     payload.image_provider = str(snapshot.get("image_provider_id") or payload.image_provider or payload.provider).strip()
@@ -15090,6 +15219,7 @@ async def delete_jinni(jinni_id: str, request: Request, x_user_id: str = Header(
         if not os.path.exists(path):
             raise HTTPException(status_code=404, detail="Jinni 不存在")
         os.remove(path)
+    get_knowledge_repository().delete_jinni_bindings(user_id, jinni_id)
     return {"ok": True}
 
 @app.post("/api/jinnis/{jinni_id}/conversations")
@@ -15119,6 +15249,7 @@ async def patch_conversation(conversation_id: str, payload: ConversationUpdateRe
     return {"conversation": update_conversation(
         user_id, conversation_id, payload.title, payload.pinned,
         payload.runtime_provider_id, payload.runtime_model,
+        payload.knowledge_mode, payload.strict_knowledge_base_id,
     )}
 
 @app.delete("/api/conversations/{conversation_id}")
@@ -16563,7 +16694,7 @@ async def chat(payload: ChatRequest, request: Request, x_user_id: str = Header(d
         if payload.conversation_id
         else new_conversation(user_id, display_title(payload.message))
     )
-    prepare_jinni_chat_payload(payload, conversation)
+    prepare_jinni_chat_payload(payload, conversation, user_id=user_id)
     if not conversation.get("messages"):
         conversation["title"] = display_title(payload.message)
 
@@ -16706,7 +16837,7 @@ async def chat_agent(payload: ChatRequest, request: Request, x_user_id: str = He
         if payload.conversation_id
         else new_conversation(user_id, display_title(payload.message))
     )
-    prepare_jinni_chat_payload(payload, conversation)
+    prepare_jinni_chat_payload(payload, conversation, user_id=user_id)
     if not conversation.get("messages"):
         conversation["title"] = display_title(payload.message)
 
@@ -16802,7 +16933,7 @@ async def chat_stream(payload: ChatRequest, request: Request, x_user_id: str = H
         if payload.conversation_id
         else new_conversation(user_id, display_title(payload.message))
     )
-    prepare_jinni_chat_payload(payload, conversation)
+    prepare_jinni_chat_payload(payload, conversation, user_id=user_id)
     if not conversation.get("messages"):
         conversation["title"] = display_title(payload.message)
 
@@ -17136,7 +17267,7 @@ async def create_chat_run(payload: ChatRequest, request: Request, x_user_id: str
     else:
         conversation = new_conversation(user_id, display_title(payload.message))
         payload.conversation_id = conversation["id"]
-    prepare_jinni_chat_payload(payload, conversation, include_knowledge=False)
+    prepare_jinni_chat_payload(payload, conversation, include_knowledge=True, user_id=user_id)
     active = active_chat_run_for_conversation(user_id, conversation["id"])
     if active:
         raise HTTPException(status_code=409, detail="当前对话正在生成，请等待完成或先停止任务")
