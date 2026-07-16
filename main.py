@@ -47,7 +47,10 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from knowledge_base import router as knowledge_base_router, start_runtime as start_knowledge_runtime, stop_runtime as stop_knowledge_runtime
-from knowledge_base.answering import build_knowledge_prompt
+from knowledge_base.answering import (build_knowledge_prompt, canonicalize_jinni_knowledge,
+                                      knowledge_scope_ids, normalize_jinni_knowledge_config,
+                                      normalize_ordinary_knowledge_context, ordinary_context_updates,
+                                      validate_jinni_knowledge_config)
 from knowledge_base.repositories import get_repository as get_knowledge_repository
 from knowledge_base.retrieval import RetrievalService as KnowledgeRetrievalService
 
@@ -2413,6 +2416,7 @@ class JinniCreateRequest(BaseModel):
     knowledge_base_ids: List[str] = []
     strict_knowledge_base_id: str = ""
     default_knowledge_mode: str = "none"
+    knowledge_config: Optional[Dict[str, Any]] = None
 
 class JinniUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, max_length=80)
@@ -2430,6 +2434,7 @@ class JinniUpdateRequest(BaseModel):
     knowledge_base_ids: Optional[List[str]] = None
     strict_knowledge_base_id: Optional[str] = None
     default_knowledge_mode: Optional[str] = None
+    knowledge_config: Optional[Dict[str, Any]] = None
 
 class OnlineImageRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=ONLINE_IMAGE_PROMPT_MAX_LENGTH)
@@ -2577,6 +2582,7 @@ class ChatRequest(BaseModel):
     provider: str = "comfly"
     ms_model: str = ""
     client_request_id: str = ""
+    knowledge_context: Optional[Dict[str, Any]] = None
 
 def chat_system_prompt(payload):
     prompt = str(getattr(payload, "system_prompt", "") or "").strip()
@@ -2624,6 +2630,8 @@ class ConversationUpdateRequest(BaseModel):
     runtime_model: Optional[str] = None
     knowledge_mode: Optional[str] = None
     strict_knowledge_base_id: Optional[str] = None
+    knowledge_context: Optional[Dict[str, Any]] = None
+    refresh_knowledge_generations: bool = False
 
 class CanvasCreateRequest(BaseModel):
     title: str = "未命名画布"
@@ -4030,57 +4038,15 @@ def normalize_jinni_payload(raw, existing=None):
             raise HTTPException(status_code=400, detail=f"每个 Jinni 最多保存 {JINNI_KNOWLEDGE_MAX} 份知识文件")
     data["knowledge_files"] = knowledge
 
-    knowledge_capabilities = data.get("knowledge_capabilities") if isinstance(data.get("knowledge_capabilities"), dict) else {}
-    data["knowledge_capabilities"] = {
-        "augment": bool(knowledge_capabilities.get("augment", False)),
-        "strict": bool(knowledge_capabilities.get("strict", False)),
-        "maintain": bool(knowledge_capabilities.get("maintain", False)),
-    }
-    knowledge_base_ids = []
-    for value in data.get("knowledge_base_ids") or []:
-        clean = re.sub(r"[^a-zA-Z0-9_-]", "", str(value or ""))
-        if clean and clean not in knowledge_base_ids:
-            knowledge_base_ids.append(clean)
-    data["knowledge_base_ids"] = knowledge_base_ids[:100]
-    strict_id = re.sub(r"[^a-zA-Z0-9_-]", "", str(data.get("strict_knowledge_base_id") or ""))
-    data["strict_knowledge_base_id"] = strict_id
-    allowed_modes = {"none", "augment", "strict", "maintain"}
-    mode = str(data.get("default_knowledge_mode") or "none").strip().lower()
-    data["default_knowledge_mode"] = mode if mode in allowed_modes else "none"
-    return data
+    return canonicalize_jinni_knowledge(data)
 
 def validate_jinni_knowledge(user_id, data, allow_missing=False):
-    repository = get_knowledge_repository()
-    allowed_ids = []
-    for knowledge_base_id in data.get("knowledge_base_ids") or []:
-        if not repository.get_knowledge_base(user_id, knowledge_base_id):
-            if allow_missing:
-                continue
-            raise HTTPException(status_code=400, detail="选择的知识库不存在或不属于当前用户")
-        allowed_ids.append(knowledge_base_id)
-    strict_id = data.get("strict_knowledge_base_id") or ""
-    if strict_id and strict_id not in allowed_ids:
-        if not repository.get_knowledge_base(user_id, strict_id):
-            if allow_missing:
-                strict_id = ""
-                data["strict_knowledge_base_id"] = ""
-            else:
-                raise HTTPException(status_code=400, detail="严格回答知识库不存在或不属于当前用户")
-        if strict_id:
-            allowed_ids.append(strict_id)
-    capabilities = data.get("knowledge_capabilities") or {}
-    mode = data.get("default_knowledge_mode") or "none"
-    if mode != "none" and not capabilities.get(mode):
-        raise HTTPException(status_code=400, detail="默认知识模式尚未启用")
-    if capabilities.get("strict") and not strict_id:
-        if allow_missing:
-            capabilities["strict"] = False
-            if mode == "strict":
-                data["default_knowledge_mode"] = "none"
-        else:
-            raise HTTPException(status_code=400, detail="启用仅知识库回答时必须选择一个严格回答知识库")
-    data["knowledge_base_ids"] = allowed_ids
-    return data
+    try:
+        return validate_jinni_knowledge_config(
+            get_knowledge_repository(), user_id, data, allow_missing=allow_missing
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 def save_jinni(user_id, jinni):
     path = jinni_path(user_id, jinni["id"])
@@ -4091,7 +4057,7 @@ def save_jinni(user_id, jinni):
             json.dump(jinni, f, ensure_ascii=False, indent=2)
         os.replace(temp_path, path)
     get_knowledge_repository().replace_jinni_bindings(
-        user_id, jinni["id"], jinni.get("knowledge_base_ids") or [], jinni.get("knowledge_capabilities") or {}
+        user_id, jinni["id"], jinni.get("knowledge_config") or normalize_jinni_knowledge_config(jinni)
     )
     return jinni
 
@@ -4112,7 +4078,7 @@ def load_jinni(user_id, jinni_id):
         if not os.path.exists(path):
             raise HTTPException(status_code=404, detail="Jinni 不存在")
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return canonicalize_jinni_knowledge(json.load(f))
 
 def list_jinnis(user_id, query=""):
     records = []
@@ -4124,7 +4090,7 @@ def list_jinnis(user_id, query=""):
                 continue
             try:
                 with open(os.path.join(directory, filename), "r", encoding="utf-8") as f:
-                    item = json.load(f)
+                    item = canonicalize_jinni_knowledge(json.load(f))
             except Exception:
                 continue
             haystack = f"{item.get('name', '')}\n{item.get('description', '')}".lower()
@@ -4135,7 +4101,14 @@ def list_jinnis(user_id, query=""):
 
 def update_jinni(user_id, jinni_id, payload):
     current = load_jinni(user_id, jinni_id)
-    data = validate_jinni_knowledge(user_id, normalize_jinni_payload(payload, current), allow_missing=True)
+    changes = payload.model_dump(exclude_unset=True) if hasattr(payload, "model_dump") else payload.dict(exclude_unset=True) if hasattr(payload, "dict") else dict(payload or {})
+    knowledge_changed = any(key in changes for key in (
+        "knowledge_config", "knowledge_capabilities", "knowledge_base_ids",
+        "strict_knowledge_base_id", "default_knowledge_mode",
+    ))
+    data = validate_jinni_knowledge(
+        user_id, normalize_jinni_payload(payload, current), allow_missing=not knowledge_changed
+    )
     data["id"] = current["id"]
     data["created_at"] = current.get("created_at") or now_ms()
     data["last_used_at"] = current.get("last_used_at") or 0
@@ -4149,7 +4122,7 @@ def jinni_snapshot(jinni):
             "id", "name", "avatar_url", "description", "instructions", "starters",
             "provider_id", "chat_model", "image_provider_id", "image_model",
             "capabilities", "knowledge_files", "knowledge_capabilities", "knowledge_base_ids",
-            "strict_knowledge_base_id", "default_knowledge_mode", "updated_at",
+            "strict_knowledge_base_id", "default_knowledge_mode", "knowledge_config", "updated_at",
         )
     }
 
@@ -4159,8 +4132,9 @@ def new_jinni_conversation(user_id, jinni):
     conversation["jinni_snapshot"] = jinni_snapshot(jinni)
     conversation["runtime_provider_id"] = jinni.get("provider_id") or ""
     conversation["runtime_model"] = jinni.get("chat_model") or ""
-    conversation["knowledge_mode"] = jinni.get("default_knowledge_mode") or "none"
-    conversation["strict_knowledge_base_id"] = jinni.get("strict_knowledge_base_id") or ""
+    knowledge_config = normalize_jinni_knowledge_config(jinni)
+    conversation["knowledge_mode"] = knowledge_config.get("default_mode") or "none"
+    conversation["strict_knowledge_base_id"] = knowledge_config.get("strict", {}).get("knowledge_base_id") or ""
     repository = get_knowledge_repository()
     generations = {}
     for knowledge_base_id in jinni.get("knowledge_base_ids") or []:
@@ -4231,10 +4205,16 @@ def load_conversation(user_id, conversation_id):
     with CONVERSATION_LOCK:
         if not os.path.exists(path):
             raise HTTPException(status_code=404, detail="对话不存在")
-        return _read_conversation_unlocked(path)
+        data = _read_conversation_unlocked(path)
+    if not data.get("jinni_snapshot") and isinstance(data.get("knowledge_context"), dict):
+        data["knowledge_updates_available"] = ordinary_context_updates(
+            get_knowledge_repository(), user_id, data.get("knowledge_context")
+        )
+    return data
 
 def update_conversation(user_id, conversation_id, title=None, pinned=None, runtime_provider_id=None, runtime_model=None,
-                        knowledge_mode=None, strict_knowledge_base_id=None):
+                        knowledge_mode=None, strict_knowledge_base_id=None, knowledge_context=None,
+                        refresh_knowledge_generations=False):
     path = conversation_path(user_id, conversation_id)
     with CONVERSATION_LOCK:
         if not os.path.exists(path):
@@ -4263,7 +4243,11 @@ def update_conversation(user_id, conversation_id, title=None, pinned=None, runti
             snapshot = data.get("jinni_snapshot") if isinstance(data.get("jinni_snapshot"), dict) else None
             if not snapshot:
                 raise HTTPException(status_code=400, detail="普通对话不支持 Jinni 知识模式")
-            capabilities = snapshot.get("knowledge_capabilities") or {}
+            knowledge_config = normalize_jinni_knowledge_config(snapshot)
+            capabilities = {
+                item: bool((knowledge_config.get(item) or {}).get("enabled"))
+                for item in ("augment", "strict", "maintain")
+            }
             if knowledge_mode is not None:
                 mode = str(knowledge_mode or "none").lower()
                 if mode not in {"none", "augment", "strict", "maintain"}:
@@ -4273,11 +4257,27 @@ def update_conversation(user_id, conversation_id, title=None, pinned=None, runti
                 data["knowledge_mode"] = mode
             if strict_knowledge_base_id is not None:
                 strict_id = str(strict_knowledge_base_id or "")
-                if strict_id and strict_id not in (snapshot.get("knowledge_base_ids") or []):
-                    raise HTTPException(status_code=403, detail="当前 Jinni 未绑定该知识库")
+                configured = (knowledge_config.get("strict") or {}).get("knowledge_base_id") or ""
+                if strict_id != configured:
+                    raise HTTPException(status_code=403, detail="Jinni 的严格回答知识库由配置快照锁定")
                 data["strict_knowledge_base_id"] = strict_id
+        if knowledge_context is not None or refresh_knowledge_generations:
+            if data.get("jinni_snapshot"):
+                raise HTTPException(status_code=400, detail="Jinni 会话的知识库范围由配置快照锁定")
+            try:
+                data["knowledge_context"] = normalize_ordinary_knowledge_context(
+                    get_knowledge_repository(), user_id,
+                    knowledge_context if knowledge_context is not None else data.get("knowledge_context"),
+                    existing=data.get("knowledge_context"), refresh=bool(refresh_knowledge_generations),
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+    if not data.get("jinni_snapshot") and isinstance(data.get("knowledge_context"), dict):
+        data["knowledge_updates_available"] = ordinary_context_updates(
+            get_knowledge_repository(), user_id, data.get("knowledge_context")
+        )
     return data
 
 def list_conversations(user_id, query=""):
@@ -8535,22 +8535,30 @@ def jinni_system_prompt(snapshot):
 
 def prepare_jinni_chat_payload(payload, conversation, include_knowledge=True, user_id=""):
     snapshot = conversation.get("jinni_snapshot") if isinstance(conversation, dict) else None
-    if not isinstance(snapshot, dict):
-        return payload
-    capabilities = snapshot.get("capabilities") if isinstance(snapshot.get("capabilities"), dict) else {}
-    base_prompt = jinni_system_prompt(snapshot) if include_knowledge else str(snapshot.get("instructions") or SYSTEM_PROMPT)
-    knowledge_mode = str(conversation.get("knowledge_mode") or snapshot.get("default_knowledge_mode") or "none")
-    knowledge_capabilities = snapshot.get("knowledge_capabilities") if isinstance(snapshot.get("knowledge_capabilities"), dict) else {}
-    if knowledge_mode in {"augment", "strict", "maintain"} and knowledge_capabilities.get(knowledge_mode) and user_id:
-        knowledge_base_ids = list(snapshot.get("knowledge_base_ids") or [])
-        if knowledge_mode == "strict":
-            strict_id = str(conversation.get("strict_knowledge_base_id") or snapshot.get("strict_knowledge_base_id") or "")
-            knowledge_base_ids = [strict_id] if strict_id in knowledge_base_ids else []
+    if isinstance(snapshot, dict):
+        capabilities = snapshot.get("capabilities") if isinstance(snapshot.get("capabilities"), dict) else {}
+        base_prompt = jinni_system_prompt(snapshot) if include_knowledge else str(snapshot.get("instructions") or SYSTEM_PROMPT)
+        knowledge_config = normalize_jinni_knowledge_config(snapshot)
+        knowledge_mode = str(conversation.get("knowledge_mode") or knowledge_config.get("default_mode") or "none")
+        mode_enabled = bool((knowledge_config.get(knowledge_mode) or {}).get("enabled"))
+        knowledge_base_ids = knowledge_scope_ids(knowledge_config, knowledge_mode) if mode_enabled else []
+        generations = conversation.get("knowledge_generations") or None
+    else:
+        capabilities = {}
+        base_prompt = str(getattr(payload, "system_prompt", "") or SYSTEM_PROMPT)
+        ordinary = conversation.get("knowledge_context") if isinstance(conversation.get("knowledge_context"), dict) else {}
+        knowledge_mode = str(ordinary.get("mode") or "none")
+        mode_enabled = knowledge_mode in {"augment", "strict"}
+        knowledge_base_ids = list(ordinary.get("knowledge_base_ids") or []) if mode_enabled else []
+        generations = ordinary.get("generations") or None
+
+    if knowledge_mode in {"augment", "strict", "maintain"} and mode_enabled and user_id:
         context = KnowledgeRetrievalService().retrieve(
             user_id, knowledge_base_ids, str(getattr(payload, "message", "") or ""),
-            generations=conversation.get("knowledge_generations") or None,
+            generations=generations,
         )
-        base_prompt = build_knowledge_prompt(str(snapshot.get("instructions") or SYSTEM_PROMPT), knowledge_mode, context)
+        instructions = str(snapshot.get("instructions") or SYSTEM_PROMPT) if isinstance(snapshot, dict) else base_prompt
+        base_prompt = build_knowledge_prompt(instructions, knowledge_mode, context)
         conversation["last_knowledge_retrieval"] = {
             "query": context.query,
             "grounded": context.grounded,
@@ -8558,6 +8566,8 @@ def prepare_jinni_chat_payload(payload, conversation, include_knowledge=True, us
             "mode": knowledge_mode,
         }
     payload.system_prompt = base_prompt
+    if not isinstance(snapshot, dict):
+        return payload
     payload.provider = str(conversation.get("runtime_provider_id") or snapshot.get("provider_id") or payload.provider).strip()
     payload.model = str(conversation.get("runtime_model") or snapshot.get("chat_model") or payload.model).strip()
     payload.image_provider = str(snapshot.get("image_provider_id") or payload.image_provider or payload.provider).strip()
@@ -15250,6 +15260,7 @@ async def patch_conversation(conversation_id: str, payload: ConversationUpdateRe
         user_id, conversation_id, payload.title, payload.pinned,
         payload.runtime_provider_id, payload.runtime_model,
         payload.knowledge_mode, payload.strict_knowledge_base_id,
+        payload.knowledge_context, payload.refresh_knowledge_generations,
     )}
 
 @app.delete("/api/conversations/{conversation_id}")
@@ -17262,11 +17273,25 @@ async def create_chat_run(payload: ChatRequest, request: Request, x_user_id: str
     if duplicate:
         return {"run": public_chat_run(duplicate), "conversation": load_conversation(user_id, duplicate["conversation_id"]), "duplicate": True}
 
+    is_new_conversation = not bool(payload.conversation_id)
     if payload.conversation_id:
         conversation = load_conversation(user_id, payload.conversation_id)
     else:
         conversation = new_conversation(user_id, display_title(payload.message))
         payload.conversation_id = conversation["id"]
+    if is_new_conversation and payload.knowledge_context is not None:
+        try:
+            conversation["knowledge_context"] = normalize_ordinary_knowledge_context(
+                get_knowledge_repository(), user_id, payload.knowledge_context
+            )
+        except ValueError as exc:
+            # Do not leave a blank history item behind when a draft binding is invalid.
+            try:
+                os.remove(conversation_path(user_id, conversation["id"]))
+            except OSError:
+                pass
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        save_conversation(user_id, conversation)
     prepare_jinni_chat_payload(payload, conversation, include_knowledge=True, user_id=user_id)
     active = active_chat_run_for_conversation(user_id, conversation["id"])
     if active:

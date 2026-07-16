@@ -231,6 +231,15 @@ class KnowledgeRepository:
                 WHERE d.user_id=? AND d.knowledge_base_id=? ORDER BY d.updated_at DESC""", (user_id, knowledge_base_id)).fetchall()
         return [dict(row) for row in rows]
 
+    def preview_document_chunks(self, user_id: str, document_id: str, generation: int,
+                                cursor: int = 0, limit: int = 100):
+        with self.connect() as db:
+            rows = db.execute("""SELECT id AS chunk_id, ordinal, text, section, page
+                FROM chunks WHERE user_id=? AND document_id=? AND generation=?
+                ORDER BY ordinal LIMIT ? OFFSET ?""",
+                (user_id, document_id, int(generation), int(limit) + 1, max(0, int(cursor)))).fetchall()
+        return [dict(row) for row in rows]
+
     def delete_document(self, user_id: str, document_id: str) -> Optional[Dict[str, Any]]:
         document = self.get_document(user_id, document_id)
         if not document:
@@ -520,16 +529,24 @@ class KnowledgeRepository:
                 (user_id, knowledge_base_id)).fetchall()
         return [dict(row) for row in rows]
 
-    def replace_jinni_bindings(self, user_id: str, jinni_id: str, knowledge_base_ids: List[str], capabilities: Dict[str, bool]):
+    def replace_jinni_bindings(self, user_id: str, jinni_id: str, knowledge_config: Dict[str, Any]):
         with self.transaction() as db:
             db.execute("DELETE FROM jinni_knowledge_bindings WHERE user_id=? AND jinni_id=?", (user_id, jinni_id))
-            for knowledge_base_id in knowledge_base_ids:
-                if not db.execute("SELECT 1 FROM knowledge_bases WHERE id=? AND user_id=?", (knowledge_base_id, user_id)).fetchone():
+            scopes = {
+                "augment": list((knowledge_config.get("augment") or {}).get("knowledge_base_ids") or []),
+                "strict": [(knowledge_config.get("strict") or {}).get("knowledge_base_id") or ""],
+                "maintain": list((knowledge_config.get("maintain") or {}).get("knowledge_base_ids") or []),
+            }
+            for capability, knowledge_base_ids in scopes.items():
+                if not (knowledge_config.get(capability) or {}).get("enabled"):
                     continue
-                for capability in ("augment", "strict", "maintain"):
-                    if capabilities.get(capability):
-                        db.execute("INSERT OR IGNORE INTO jinni_knowledge_bindings VALUES(?,?,?,?,?)",
-                                   (jinni_id, user_id, knowledge_base_id, capability, now_ms()))
+                for knowledge_base_id in knowledge_base_ids:
+                    if not knowledge_base_id or not db.execute(
+                        "SELECT 1 FROM knowledge_bases WHERE id=? AND user_id=?", (knowledge_base_id, user_id)
+                    ).fetchone():
+                        continue
+                    db.execute("INSERT OR IGNORE INTO jinni_knowledge_bindings VALUES(?,?,?,?,?)",
+                               (jinni_id, user_id, knowledge_base_id, capability, now_ms()))
 
     def delete_jinni_bindings(self, user_id: str, jinni_id: str):
         with self.transaction() as db:

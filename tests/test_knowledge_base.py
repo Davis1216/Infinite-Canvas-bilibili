@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import shutil
 import sqlite3
+from unittest.mock import patch
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -191,6 +192,106 @@ class KnowledgeBaseApiTests(unittest.TestCase):
             json={"strict_knowledge_base_id": uuid.uuid4().hex},
         )
         self.assertEqual(forbidden.status_code, 403)
+
+    def test_per_capability_jinni_config_and_ordinary_conversation_context(self):
+        first = self.create_base("品牌资料")
+        second = self.create_base("维护资料")
+        invalid_jinni = self.client.post("/api/jinnis", headers=self.json_headers, json={
+            "name": "无范围助理", "instructions": "测试", "knowledge_config": {
+                "default_mode": "none", "augment": {"enabled": True, "knowledge_base_ids": []},
+                "strict": {"enabled": False, "knowledge_base_id": ""},
+                "maintain": {"enabled": False, "knowledge_base_ids": []},
+            },
+        })
+        self.assertEqual(invalid_jinni.status_code, 400)
+        created = self.client.post("/api/jinnis", headers=self.json_headers, json={
+            "name": "知识助理", "instructions": "依据授权范围工作。", "knowledge_config": {
+                "default_mode": "augment",
+                "augment": {"enabled": True, "knowledge_base_ids": [first["id"]]},
+                "strict": {"enabled": True, "knowledge_base_id": second["id"]},
+                "maintain": {"enabled": True, "knowledge_base_ids": [second["id"]]},
+            },
+        })
+        self.assertEqual(created.status_code, 200, created.text)
+        jinni = created.json()["jinni"]
+        self.addCleanup(lambda: self.client.delete(f"/api/jinnis/{jinni['id']}", headers=self.headers))
+        self.assertEqual(jinni["knowledge_config"]["augment"]["knowledge_base_ids"], [first["id"]])
+        self.assertEqual(jinni["knowledge_config"]["strict"]["knowledge_base_id"], second["id"])
+        conversation = self.client.post(
+            f"/api/jinnis/{jinni['id']}/conversations", headers=self.headers
+        ).json()["conversation"]
+        self.assertEqual(conversation["knowledge_mode"], "augment")
+        locked = self.client.patch(
+            f"/api/conversations/{conversation['id']}", headers=self.json_headers,
+            json={"knowledge_context": {"mode": "strict", "knowledge_base_ids": [first["id"]]}},
+        )
+        self.assertEqual(locked.status_code, 400)
+
+        ordinary = self.client.post("/api/conversations", headers=self.json_headers, json={"title": "普通知识问答"}).json()["conversation"]
+        self.addCleanup(lambda: self.client.delete(f"/api/conversations/{ordinary['id']}", headers=self.headers))
+        bound = self.client.patch(
+            f"/api/conversations/{ordinary['id']}", headers=self.json_headers,
+            json={"knowledge_context": {"mode": "strict", "knowledge_base_ids": [first["id"], second["id"]]}},
+        )
+        self.assertEqual(bound.status_code, 200, bound.text)
+        context = bound.json()["conversation"]["knowledge_context"]
+        self.assertEqual(context["mode"], "strict")
+        self.assertEqual(context["generations"], {first["id"]: 1, second["id"]: 1})
+        main.get_knowledge_repository().activate_generation(self.user_id, first["id"], 2)
+        loaded = self.client.get(f"/api/conversations/{ordinary['id']}", headers=self.headers).json()["conversation"]
+        self.assertEqual(loaded["knowledge_updates_available"], [first["id"]])
+        refreshed = self.client.patch(
+            f"/api/conversations/{ordinary['id']}", headers=self.json_headers,
+            json={"refresh_knowledge_generations": True},
+        ).json()["conversation"]
+        self.assertEqual(refreshed["knowledge_context"]["generations"][first["id"]], 2)
+        self.assertEqual(refreshed["knowledge_updates_available"], [])
+        invalid = self.client.patch(
+            f"/api/conversations/{ordinary['id']}", headers=self.json_headers,
+            json={"knowledge_context": {"mode": "augment", "knowledge_base_ids": [uuid.uuid4().hex]}},
+        )
+        self.assertEqual(invalid.status_code, 400)
+
+        async def no_background_run(*args, **kwargs):
+            return None
+        with patch.object(main, "run_chat_background", new=no_background_run):
+            first_message = self.client.post("/api/chat/runs", headers=self.json_headers, json={
+                "message": "依据资料回答", "client_request_id": uuid.uuid4().hex,
+                "knowledge_context": {"mode": "augment", "knowledge_base_ids": [second["id"]]},
+            })
+        self.assertEqual(first_message.status_code, 202, first_message.text)
+        drafted = first_message.json()["conversation"]
+        self.addCleanup(lambda: self.client.delete(f"/api/conversations/{drafted['id']}", headers=self.headers))
+        self.assertEqual(drafted["knowledge_context"]["knowledge_base_ids"], [second["id"]])
+
+    def test_document_preview_views_and_isolation(self):
+        knowledge_base = self.create_base("预览测试")
+        created = self.client.post(
+            f"/api/knowledge-bases/{knowledge_base['id']}/entries", headers=self.json_headers,
+            json={"title": "安全 Markdown", "content": "# 标题\n\n<script>alert(1)</script>\n\n正文内容"},
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        document_id = created.json()["document"]["id"]
+        self.wait_for_job(created.json()["job"]["id"])
+        preview = self.client.get(
+            f"/api/knowledge-bases/{knowledge_base['id']}/documents/{document_id}/preview?view=read",
+            headers=self.headers,
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        body = preview.json()
+        self.assertEqual(body["format"], "md")
+        self.assertTrue(any("正文内容" in block["text"] for block in body["blocks"]))
+        self.assertNotIn("content_path", body["document"])
+        chunks = self.client.get(
+            f"/api/knowledge-bases/{knowledge_base['id']}/documents/{document_id}/preview?view=chunks",
+            headers=self.headers,
+        ).json()["blocks"]
+        self.assertTrue(chunks)
+        stranger = {"X-User-ID": f"stranger-{uuid.uuid4().hex}"}
+        denied = self.client.get(
+            f"/api/knowledge-bases/{knowledge_base['id']}/documents/{document_id}/preview", headers=stranger,
+        )
+        self.assertEqual(denied.status_code, 404)
 
     def test_embedding_profile_secrets_are_not_returned(self):
         response = self.client.post("/api/embedding-profiles", headers=self.json_headers, json={

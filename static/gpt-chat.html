@@ -618,6 +618,50 @@
         .jinni-kb-option span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .knowledge-mode-select { display:none; height:34px; max-width:142px; padding:0 28px 0 9px; border:1px solid var(--chat-line); border-radius:10px; outline:0; background:var(--chat-panel-2); color:var(--chat-text); font-size:9.5px; font-weight:850; }
         .knowledge-mode-select.visible { display:block; }
+        .ordinary-kb-trigger { display:none; height:34px; max-width:170px; padding:0 10px; align-items:center; gap:6px; border:1px solid var(--chat-line); border-radius:10px; background:var(--chat-panel-2); color:var(--chat-text); font-size:9.5px; font-weight:850; }
+        .ordinary-kb-trigger.visible { display:flex; }
+        .ordinary-kb-trigger.bound { border-color:var(--chat-line-2); background:var(--chat-soft); }
+        .ordinary-kb-trigger.has-update { color:#d97706; }
+        .ordinary-kb-trigger i,.ordinary-kb-trigger svg { width:14px; height:14px; flex:0 0 14px; }
+        .ordinary-kb-trigger span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .jinni-knowledge-section { grid-column:1/-1; display:flex; flex-direction:column; gap:10px; }
+        .jinni-knowledge-intro { padding:12px 13px; border:1px solid var(--chat-line); border-radius:12px; background:var(--chat-soft); }
+        .jinni-knowledge-intro strong { display:block; font-size:12px; }
+        .jinni-knowledge-intro span { display:block; margin-top:4px; color:var(--chat-muted); font-size:9.5px; line-height:1.55; }
+        .jinni-knowledge-card { overflow:hidden; border:1px solid var(--chat-line); border-radius:13px; background:var(--chat-bg); transition:.16s; }
+        .jinni-knowledge-card.enabled { border-color:var(--chat-line-2); box-shadow:0 8px 18px var(--chat-shadow); }
+        .jinni-knowledge-card-head { min-height:64px; padding:11px 12px; display:flex; align-items:flex-start; gap:10px; cursor:pointer; }
+        .jinni-knowledge-card-head input { width:17px; height:17px; margin-top:2px; flex:0 0 17px; }
+        .jinni-knowledge-card-copy { min-width:0; flex:1; }
+        .jinni-knowledge-card-copy strong { display:block; color:var(--chat-text); font-size:11px; }
+        .jinni-knowledge-card-copy span { display:block; margin-top:4px; color:var(--chat-muted); font-size:9px; line-height:1.5; }
+        .jinni-knowledge-card-body { padding:0 12px 12px 39px; }
+        .jinni-knowledge-card-body[hidden] { display:none; }
+        .jinni-knowledge-card-body>label { display:block; margin-bottom:7px; color:var(--chat-faint); font-size:9px; font-weight:900; }
+        .jinni-knowledge-default { padding:12px; border:1px solid var(--chat-line); border-radius:12px; background:var(--chat-panel); }
+        .jinni-knowledge-default label { display:block; margin-bottom:7px; font-size:10px; font-weight:900; }
+        .jinni-knowledge-default select { width:100%; height:40px; padding:0 10px; border:1px solid var(--chat-line); border-radius:10px; background:var(--chat-bg); color:var(--chat-text); }
+        .jinni-legacy-knowledge { border:1px solid var(--chat-line); border-radius:12px; background:var(--chat-panel); }
+        .jinni-legacy-knowledge summary { padding:12px; cursor:pointer; color:var(--chat-muted); font-size:10px; font-weight:900; }
+        .jinni-legacy-body { padding:0 12px 12px; }
+        .knowledge-picker-modal { position:fixed; inset:0; z-index:10015; display:flex; align-items:center; justify-content:center; padding:22px; background:rgba(15,23,42,.58); backdrop-filter:blur(10px); }
+        .knowledge-picker-modal[hidden] { display:none; }
+        .knowledge-picker-dialog { width:min(620px,100%); max-height:min(760px,90vh); overflow:hidden; display:flex; flex-direction:column; border:1px solid var(--chat-line-2); border-radius:17px; background:var(--chat-panel); box-shadow:0 28px 70px rgba(15,23,42,.25); }
+        .knowledge-picker-head { padding:15px 16px; display:flex; justify-content:space-between; gap:12px; border-bottom:1px solid var(--chat-line); }
+        .knowledge-picker-head h2 { margin:0; font-size:15px; }
+        .knowledge-picker-head p { margin:4px 0 0; color:var(--chat-muted); font-size:9.5px; }
+        .knowledge-picker-body { min-height:0; overflow:auto; padding:15px 16px; }
+        .knowledge-picker-modes { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .knowledge-picker-mode { padding:11px; display:flex; align-items:flex-start; gap:8px; border:1px solid var(--chat-line); border-radius:11px; background:var(--chat-bg); }
+        .knowledge-picker-mode strong { display:block; font-size:10px; }
+        .knowledge-picker-mode span { display:block; margin-top:3px; color:var(--chat-muted); font-size:8.8px; line-height:1.45; }
+        .knowledge-picker-list { margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+        .knowledge-picker-empty { padding:28px; grid-column:1/-1; border:1px dashed var(--chat-line); border-radius:12px; color:var(--chat-muted); text-align:center; font-size:10px; }
+        .knowledge-picker-foot { padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid var(--chat-line); }
+        .knowledge-picker-foot>div { display:flex; gap:8px; }
+        .knowledge-picker-btn { height:36px; padding:0 12px; border:1px solid var(--chat-line); border-radius:10px; background:var(--chat-panel-2); color:var(--chat-text); font-size:10px; font-weight:900; }
+        .knowledge-picker-btn.primary { border-color:var(--chat-strong); background:var(--chat-strong); color:var(--chat-strong-text); }
+        .knowledge-picker-error { min-height:16px; margin-top:10px; color:#dc2626; font-size:10px; font-weight:800; }
         .jinni-knowledge-row { padding:7px 9px; border:1px solid var(--chat-line); border-radius:10px; background:var(--chat-bg); }
         .jinni-knowledge-row i,.jinni-knowledge-row svg { width:15px; height:15px; color:var(--chat-muted); }
         .jinni-knowledge-name { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--chat-text); font-size:10px; font-weight:850; }
@@ -657,6 +701,9 @@
             .jinni-field.wide { grid-column:1; }
             .jinni-capabilities { grid-template-columns:1fr; }
             .jinni-kb-list { grid-template-columns:1fr; }
+            .knowledge-picker-list,.knowledge-picker-modes { grid-template-columns:1fr; }
+            .knowledge-picker-modal { padding:10px; align-items:flex-end; }
+            .knowledge-picker-dialog { max-height:88vh; border-radius:17px 17px 10px 10px; }
             .jinni-starter-chips { grid-template-columns:1fr; }
             .jinni-editor-head { align-items:flex-start; flex-direction:column; }
         }
@@ -728,6 +775,7 @@
                                         <i data-lucide="paperclip"></i>
                                     </label>
                                     <select id="knowledgeModeSelect" class="knowledge-mode-select" title="Jinni 知识模式" onchange="setConversationKnowledgeMode(this.value)"></select>
+                                    <button id="ordinaryKnowledgeBtn" type="button" class="ordinary-kb-trigger" onclick="openOrdinaryKnowledgePicker()" title="为普通聊天添加知识库"><i data-lucide="plus"></i><span>知识库</span></button>
                                     <div id="modelPicker" class="model-picker">
                                         <button id="modelPickerBtn" class="model-picker-button" onclick="event.stopPropagation();toggleModelPicker()" title="选择平台和模型">
                                             <i data-lucide="boxes"></i>
@@ -832,6 +880,13 @@
                 <button id="confirmDialogCancel" type="button" onclick="resolveConfirmDialog(false)">取消</button>
                 <button id="confirmDialogAccept" type="button" class="danger" onclick="resolveConfirmDialog(true)">确认删除</button>
             </div>
+        </section>
+    </div>
+    <div id="knowledgePickerModal" class="knowledge-picker-modal" hidden onclick="if(event.target===this) closeOrdinaryKnowledgePicker()">
+        <section class="knowledge-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="knowledgePickerTitle" onclick="event.stopPropagation()">
+            <div class="knowledge-picker-head"><div><h2 id="knowledgePickerTitle">为当前聊天添加知识库</h2><p>普通聊天可自由选择知识范围，不会改变任何 Jinni 配置。</p></div><button type="button" class="jinni-row-remove" onclick="closeOrdinaryKnowledgePicker()" aria-label="关闭"><i data-lucide="x"></i></button></div>
+            <div id="knowledgePickerBody" class="knowledge-picker-body"></div>
+            <div class="knowledge-picker-foot"><button type="button" class="knowledge-picker-btn" onclick="clearOrdinaryKnowledge()">清除知识库</button><div><button type="button" class="knowledge-picker-btn" onclick="closeOrdinaryKnowledgePicker()">取消</button><button type="button" class="knowledge-picker-btn primary" onclick="saveOrdinaryKnowledge()">应用到当前聊天</button></div></div>
         </section>
     </div>
 
@@ -940,6 +995,8 @@
         let config = { chat_model: 'gpt-5.5', image_model: 'gpt-image-2', ms_chat_models: [] };
         let jinnis = [];
         let knowledgeBases = [];
+        let ordinaryKnowledgeDraft = {mode:'none',knowledge_base_ids:[]};
+        let ordinaryKnowledgeEditing = null;
         let jinniWorkspaceMode = 'chat';
         let editingJinni = null;
         let editingKnowledgeFiles = [];
@@ -1090,6 +1147,52 @@
             return models.map(model => `<option value="${escapeHtml(model)}" ${model === selected ? 'selected' : ''}>${escapeHtml(shortModelName(model))}</option>`).join('');
         }
 
+        function normalizedJinniKnowledgeConfig(item={}){
+            if(isObject(item.knowledge_config)){
+                const config = item.knowledge_config;
+                return {
+                    default_mode:['none','augment','strict','maintain'].includes(config.default_mode) ? config.default_mode : 'none',
+                    augment:{enabled:!!config.augment?.enabled,knowledge_base_ids:[...(config.augment?.knowledge_base_ids||[])]},
+                    strict:{enabled:!!config.strict?.enabled,knowledge_base_id:config.strict?.knowledge_base_id||''},
+                    maintain:{enabled:!!config.maintain?.enabled,knowledge_base_ids:[...(config.maintain?.knowledge_base_ids||[])]},
+                };
+            }
+            const ids=[...(item.knowledge_base_ids||[])];
+            return {
+                default_mode:item.default_knowledge_mode||'none',
+                augment:{enabled:!!item.knowledge_capabilities?.augment,knowledge_base_ids:ids},
+                strict:{enabled:!!item.knowledge_capabilities?.strict,knowledge_base_id:item.strict_knowledge_base_id||''},
+                maintain:{enabled:!!item.knowledge_capabilities?.maintain,knowledge_base_ids:ids},
+            };
+        }
+
+        function renderJinniKnowledgeChoices(name,selected=[],radio=false){
+            if(!knowledgeBases.length) return '<div class="thread-empty">还没有知识库。请先在主导航“知识库”中创建并导入资料。</div>';
+            const values=Array.isArray(selected)?selected:[selected];
+            return knowledgeBases.map(item=>`<label class="jinni-kb-option"><input type="${radio?'radio':'checkbox'}" name="${name}" value="${escapeHtml(item.id)}" ${values.includes(item.id)?'checked':''}><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span></label>`).join('');
+        }
+
+        function refreshJinniDefaultKnowledgeModes(changedMode=''){
+            const select=document.getElementById('jinniDefaultKnowledgeMode');
+            if(!select) return;
+            const current=select.value||'none';
+            const enabled={augment:!!document.getElementById('jinniKbAugment')?.checked,strict:!!document.getElementById('jinniKbStrict')?.checked,maintain:!!document.getElementById('jinniKbMaintain')?.checked};
+            const labels={augment:'结合知识库回答',strict:'仅知识库回答',maintain:'知识维护'};
+            select.innerHTML=`<option value="none">普通对话（默认不检索知识库）</option>`+Object.keys(labels).filter(mode=>enabled[mode]).map(mode=>`<option value="${mode}">${labels[mode]}</option>`).join('');
+            select.value=enabled[current]||current==='none'?current:'none';
+            const hint=document.getElementById('jinniKnowledgeHint');
+            if(changedMode && !enabled[changedMode] && current===changedMode && hint) hint.textContent='已关闭默认能力，打开 Jinni 时将回到普通对话。';
+        }
+
+        function toggleJinniKnowledgeCapability(mode){
+            const checkbox=document.getElementById(`jinniKb${mode[0].toUpperCase()}${mode.slice(1)}`);
+            const body=document.getElementById(`jinniKb${mode[0].toUpperCase()}${mode.slice(1)}Body`);
+            const card=checkbox?.closest('.jinni-knowledge-card');
+            if(body) body.hidden=!checkbox?.checked;
+            card?.classList.toggle('enabled',!!checkbox?.checked);
+            refreshJinniDefaultKnowledgeModes(mode);
+        }
+
         function openJinniEditor(id=''){
             const source = id ? jinnis.find(item => item.id === id) : null;
             const defaultChatProvider = source?.provider_id || chatProviders()[0]?.id || 'comfly';
@@ -1102,7 +1205,8 @@
                 image_model:imageProviders().find(item => item.id === defaultImageProvider)?.image_models?.[0] || config.image_model || '',
                 capabilities:{chat:true,generate_image:false,edit_image:false}, knowledge_files:[],
                 knowledge_capabilities:{augment:false,strict:false,maintain:false}, knowledge_base_ids:[],
-                strict_knowledge_base_id:'', default_knowledge_mode:'none'
+                strict_knowledge_base_id:'', default_knowledge_mode:'none',
+                knowledge_config:{default_mode:'none',augment:{enabled:false,knowledge_base_ids:[]},strict:{enabled:false,knowledge_base_id:''},maintain:{enabled:false,knowledge_base_ids:[]}}
             };
             editingKnowledgeFiles = [...(editingJinni.knowledge_files || [])];
             jinniWorkspaceMode = 'editor';
@@ -1116,6 +1220,7 @@
             const workspace = document.getElementById('jinniWorkspace');
             if(!workspace || !editingJinni || jinniWorkspaceMode !== 'editor') return;
             const starters = (editingJinni.starters?.length ? editingJinni.starters : ['']).slice(0,6);
+            const knowledgeConfig = normalizedJinniKnowledgeConfig(editingJinni);
             workspace.innerHTML = `<div class="jinni-editor">
                 <div class="jinni-editor-head"><h2>${editingJinni.id ? '编辑 Jinni' : '新建 Jinni'}</h2><div class="jinni-editor-actions">${editingJinni.id ? '<button type="button" class="jinni-danger-action" onclick="deleteEditingJinni()">删除</button>' : ''}<button type="button" class="jinni-secondary-action" onclick="showJinniManager()">取消</button><button type="button" class="jinni-primary-action" onclick="saveJinni()"><i data-lucide="save"></i><span>保存 Jinni</span></button></div></div>
                 <form id="jinniForm" class="jinni-form" onsubmit="event.preventDefault();saveJinni()">
@@ -1129,14 +1234,20 @@
                     <div class="jinni-field"><label for="jinniImageProvider">图像平台</label><select id="jinniImageProvider" onchange="refreshJinniImageModels()">${jinniProviderOptions('image',editingJinni.image_provider_id)}</select></div>
                     <div class="jinni-field"><label for="jinniImageModel">默认图像模型</label><select id="jinniImageModel">${jinniModelOptions('image',editingJinni.image_provider_id,editingJinni.image_model)}</select></div>
                     <div class="jinni-field wide"><span class="jinni-section-label">能力</span><div class="jinni-capabilities"><label class="jinni-capability"><input type="checkbox" checked disabled><span>聊天</span></label><label class="jinni-capability"><input id="jinniCanGenerate" type="checkbox" ${editingJinni.capabilities?.generate_image ? 'checked' : ''}><span>生成图片</span></label><label class="jinni-capability"><input id="jinniCanEdit" type="checkbox" ${editingJinni.capabilities?.edit_image ? 'checked' : ''}><span>编辑图片</span></label></div></div>
-                    <div class="jinni-field wide"><span class="jinni-section-label">知识库能力</span><div class="jinni-capabilities"><label class="jinni-capability"><input id="jinniKbAugment" type="checkbox" ${editingJinni.knowledge_capabilities?.augment ? 'checked' : ''}><span>结合知识库回答</span></label><label class="jinni-capability"><input id="jinniKbStrict" type="checkbox" ${editingJinni.knowledge_capabilities?.strict ? 'checked' : ''}><span>仅知识库回答</span></label><label class="jinni-capability"><input id="jinniKbMaintain" type="checkbox" ${editingJinni.knowledge_capabilities?.maintain ? 'checked' : ''}><span>知识维护</span></label></div><small>能力彼此独立；会话中只能在这里授权的模式之间切换。</small></div>
-                    <div class="jinni-field wide"><label>绑定知识库</label><div class="jinni-kb-list">${knowledgeBases.length ? knowledgeBases.map(item => `<label class="jinni-kb-option"><input type="checkbox" name="jinniKnowledgeBase" value="${escapeHtml(item.id)}" ${(editingJinni.knowledge_base_ids||[]).includes(item.id)?'checked':''}><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span></label>`).join('') : '<div class="thread-empty">还没有独立知识库，请先从主导航“知识库”创建。</div>'}</div></div>
-                    <div class="jinni-field"><label for="jinniStrictKnowledgeBase">严格回答知识库</label><select id="jinniStrictKnowledgeBase"><option value="">请选择一个知识库</option>${knowledgeBases.map(item => `<option value="${escapeHtml(item.id)}" ${editingJinni.strict_knowledge_base_id===item.id?'selected':''}>${escapeHtml(item.name)}</option>`).join('')}</select></div>
-                    <div class="jinni-field"><label for="jinniDefaultKnowledgeMode">默认知识模式</label><select id="jinniDefaultKnowledgeMode"><option value="none" ${editingJinni.default_knowledge_mode==='none'?'selected':''}>不使用知识库</option><option value="augment" ${editingJinni.default_knowledge_mode==='augment'?'selected':''}>结合知识库回答</option><option value="strict" ${editingJinni.default_knowledge_mode==='strict'?'selected':''}>仅知识库回答</option><option value="maintain" ${editingJinni.default_knowledge_mode==='maintain'?'selected':''}>知识维护</option></select></div>
-                    <div class="jinni-field wide"><label>旧版知识文件（兼容）</label><div id="jinniKnowledgeList" class="jinni-knowledge-list">${renderEditingKnowledge()}</div><input id="jinniKnowledgeInput" type="file" multiple hidden accept=".pdf,.txt,.md,.markdown,.json,.csv,.log,.py,.js,.ts,.tsx,.jsx,.html,.css,.xml,.yaml,.yml,.docx,.xlsx" onchange="uploadJinniKnowledge(this.files);this.value='' "><button type="button" class="jinni-add-row" onclick="document.getElementById('jinniKnowledgeInput').click()"><i data-lucide="paperclip"></i><span>添加旧版知识文件</span></button><small>为历史 Jinni 保留；新知识建议统一放入独立知识库。</small></div>
+                    <section class="jinni-knowledge-section">
+                        <div class="jinni-knowledge-intro"><strong>知识库使用方式</strong><span>三种能力彼此独立。只为需要的能力选择资料范围，聊天页不能扩大这里授权的知识库。</span></div>
+                        <article class="jinni-knowledge-card ${knowledgeConfig.augment.enabled?'enabled':''}"><label class="jinni-knowledge-card-head"><input id="jinniKbAugment" type="checkbox" ${knowledgeConfig.augment.enabled?'checked':''} onchange="toggleJinniKnowledgeCapability('augment')"><span class="jinni-knowledge-card-copy"><strong>结合知识库回答</strong><span>引用所选资料，也允许结合模型通用知识；知识库事实会带引用。</span></span></label><div id="jinniKbAugmentBody" class="jinni-knowledge-card-body" ${knowledgeConfig.augment.enabled?'':'hidden'}><label>可引用的知识库（可多选）</label><div class="jinni-kb-list">${renderJinniKnowledgeChoices('jinniKbAugmentBase',knowledgeConfig.augment.knowledge_base_ids)}</div></div></article>
+                        <article class="jinni-knowledge-card ${knowledgeConfig.strict.enabled?'enabled':''}"><label class="jinni-knowledge-card-head"><input id="jinniKbStrict" type="checkbox" ${knowledgeConfig.strict.enabled?'checked':''} onchange="toggleJinniKnowledgeCapability('strict')"><span class="jinni-knowledge-card-copy"><strong>仅知识库回答</strong><span>只能依据一个指定知识库回答；没有可靠证据时明确拒答。</span></span></label><div id="jinniKbStrictBody" class="jinni-knowledge-card-body" ${knowledgeConfig.strict.enabled?'':'hidden'}><label>严格回答知识库（单选）</label><div class="jinni-kb-list">${renderJinniKnowledgeChoices('jinniKbStrictBase',knowledgeConfig.strict.knowledge_base_id,true)}</div></div></article>
+                        <article class="jinni-knowledge-card ${knowledgeConfig.maintain.enabled?'enabled':''}"><label class="jinni-knowledge-card-head"><input id="jinniKbMaintain" type="checkbox" ${knowledgeConfig.maintain.enabled?'checked':''} onchange="toggleJinniKnowledgeCapability('maintain')"><span class="jinni-knowledge-card-copy"><strong>知识维护</strong><span>分析重复、冲突和过期风险，只生成可审批建议，不会直接修改资料。</span></span></label><div id="jinniKbMaintainBody" class="jinni-knowledge-card-body" ${knowledgeConfig.maintain.enabled?'':'hidden'}><label>需要维护的知识库（可多选）</label><div class="jinni-kb-list">${renderJinniKnowledgeChoices('jinniKbMaintainBase',knowledgeConfig.maintain.knowledge_base_ids)}</div></div></article>
+                        <div class="jinni-knowledge-default"><label for="jinniDefaultKnowledgeMode">打开这个 Jinni 时默认使用</label><select id="jinniDefaultKnowledgeMode"></select><small id="jinniKnowledgeHint">会话中只能切换到上面已启用的能力。</small></div>
+                        <details class="jinni-legacy-knowledge"><summary>兼容知识文件（旧版 Jinni）</summary><div class="jinni-legacy-body"><div id="jinniKnowledgeList" class="jinni-knowledge-list">${renderEditingKnowledge()}</div><input id="jinniKnowledgeInput" type="file" multiple hidden accept=".pdf,.txt,.md,.markdown,.json,.csv,.log,.py,.js,.ts,.tsx,.jsx,.html,.css,.xml,.yaml,.yml,.docx,.xlsx" onchange="uploadJinniKnowledge(this.files);this.value='' "><button type="button" class="jinni-add-row" onclick="document.getElementById('jinniKnowledgeInput').click()"><i data-lucide="paperclip"></i><span>添加兼容知识文件</span></button><small>新知识建议统一放入独立知识库；此处仅为历史 Jinni 保留。</small></div></details>
+                    </section>
                     <div id="jinniFormError" class="jinni-form-error"></div>
                 </form>
             </div>`;
+            refreshJinniDefaultKnowledgeModes();
+            const defaultSelect=document.getElementById('jinniDefaultKnowledgeMode');
+            if(defaultSelect) defaultSelect.value=knowledgeConfig.default_mode;
             lucide.createIcons();
         }
 
@@ -1145,6 +1256,13 @@
         }
 
         function collectJinniDraft(){
+            const knowledgeConfig={
+                default_mode:document.getElementById('jinniDefaultKnowledgeMode')?.value||'none',
+                augment:{enabled:!!document.getElementById('jinniKbAugment')?.checked,knowledge_base_ids:[...document.querySelectorAll('input[name="jinniKbAugmentBase"]:checked')].map(input=>input.value)},
+                strict:{enabled:!!document.getElementById('jinniKbStrict')?.checked,knowledge_base_id:document.querySelector('input[name="jinniKbStrictBase"]:checked')?.value||''},
+                maintain:{enabled:!!document.getElementById('jinniKbMaintain')?.checked,knowledge_base_ids:[...document.querySelectorAll('input[name="jinniKbMaintainBase"]:checked')].map(input=>input.value)},
+            };
+            const unionIds=[...new Set([...knowledgeConfig.augment.knowledge_base_ids,knowledgeConfig.strict.knowledge_base_id,...knowledgeConfig.maintain.knowledge_base_ids].filter(Boolean))];
             return {
                 name:document.getElementById('jinniName')?.value.trim() || '',
                 avatar_url:editingJinni?.avatar_url || '',
@@ -1157,10 +1275,11 @@
                 image_model:document.getElementById('jinniImageModel')?.value || '',
                 capabilities:{chat:true,generate_image:!!document.getElementById('jinniCanGenerate')?.checked,edit_image:!!document.getElementById('jinniCanEdit')?.checked},
                 knowledge_files:editingKnowledgeFiles,
-                knowledge_capabilities:{augment:!!document.getElementById('jinniKbAugment')?.checked,strict:!!document.getElementById('jinniKbStrict')?.checked,maintain:!!document.getElementById('jinniKbMaintain')?.checked},
-                knowledge_base_ids:[...document.querySelectorAll('input[name="jinniKnowledgeBase"]:checked')].map(input=>input.value),
-                strict_knowledge_base_id:document.getElementById('jinniStrictKnowledgeBase')?.value || '',
-                default_knowledge_mode:document.getElementById('jinniDefaultKnowledgeMode')?.value || 'none',
+                knowledge_config:knowledgeConfig,
+                knowledge_capabilities:{augment:knowledgeConfig.augment.enabled,strict:knowledgeConfig.strict.enabled,maintain:knowledgeConfig.maintain.enabled},
+                knowledge_base_ids:unionIds,
+                strict_knowledge_base_id:knowledgeConfig.strict.knowledge_base_id,
+                default_knowledge_mode:knowledgeConfig.default_mode,
             };
         }
 
@@ -1172,8 +1291,9 @@
         async function saveJinni(){
             const draft = collectJinniDraft();
             if(!draft.name || !draft.instructions){ setJinniFormError('请填写 Jinni 名称和指令。'); return; }
-            if(draft.knowledge_capabilities.strict && !draft.strict_knowledge_base_id){ setJinniFormError('启用仅知识库回答时，请选择严格回答知识库。'); return; }
-            if(draft.strict_knowledge_base_id && !draft.knowledge_base_ids.includes(draft.strict_knowledge_base_id)) draft.knowledge_base_ids.push(draft.strict_knowledge_base_id);
+            if(draft.knowledge_config.augment.enabled && !draft.knowledge_config.augment.knowledge_base_ids.length){ setJinniFormError('启用结合知识库回答时，请至少选择一个知识库。'); return; }
+            if(draft.knowledge_config.strict.enabled && !draft.knowledge_config.strict.knowledge_base_id){ setJinniFormError('启用仅知识库回答时，请选择一个知识库。'); return; }
+            if(draft.knowledge_config.maintain.enabled && !draft.knowledge_config.maintain.knowledge_base_ids.length){ setJinniFormError('启用知识维护时，请至少选择一个知识库。'); return; }
             setJinniFormError('');
             try {
                 const id = editingJinni?.id;
@@ -1333,12 +1453,77 @@
 
         function updateKnowledgeModeControl(){
             const select = document.getElementById('knowledgeModeSelect');
-            if(!select) return;
+            const ordinaryButton = document.getElementById('ordinaryKnowledgeBtn');
+            if(!select || !ordinaryButton) return;
             const snapshot = currentJinniSnapshot();
-            const capabilities = snapshot?.knowledge_capabilities || {};
-            const options = [['none','不使用知识库'],['augment','结合知识'],['strict','仅知识库'],['maintain','知识维护']].filter(([value]) => value === 'none' || capabilities[value]);
+            const config = snapshot ? normalizedJinniKnowledgeConfig(snapshot) : null;
+            const options = [['none','普通对话'],['augment','结合知识'],['strict','仅知识库'],['maintain','知识维护']].filter(([value]) => value === 'none' || config?.[value]?.enabled);
             select.innerHTML = options.map(([value,label]) => `<option value="${value}" ${value===(currentConversation?.knowledge_mode||snapshot?.default_knowledge_mode||'none')?'selected':''}>${label}</option>`).join('');
             select.classList.toggle('visible', !!snapshot && options.length > 1);
+            ordinaryButton.classList.toggle('visible',!snapshot);
+            if(!snapshot){
+                const context=currentConversation?.knowledge_context||ordinaryKnowledgeDraft;
+                const ids=context?.knowledge_base_ids||[];
+                const bound=context?.mode!=='none'&&ids.length;
+                const updates=currentConversation?.knowledge_updates_available||[];
+                ordinaryButton.classList.toggle('bound',!!bound);
+                ordinaryButton.classList.toggle('has-update',updates.length>0);
+                ordinaryButton.innerHTML=bound?`<i data-lucide="book-open"></i><span>${context.mode==='strict'?'仅知识库':'结合知识'} · ${ids.length}${updates.length?' · 有新版本':''}</span>`:'<i data-lucide="plus"></i><span>知识库</span>';
+                ordinaryButton.title=updates.length?'所选知识库已有新版本，点击管理':'为普通聊天添加知识库';
+                lucide.createIcons();
+            }
+        }
+
+        function ordinaryKnowledgeContext(){
+            return currentConversation?.jinni_snapshot ? {mode:'none',knowledge_base_ids:[]} : (currentConversation?.knowledge_context||ordinaryKnowledgeDraft||{mode:'none',knowledge_base_ids:[]});
+        }
+
+        function openOrdinaryKnowledgePicker(){
+            if(currentJinniSnapshot()) return;
+            const context=ordinaryKnowledgeContext();
+            ordinaryKnowledgeEditing={mode:context.mode==='strict'?'strict':'augment',knowledge_base_ids:[...(context.knowledge_base_ids||[])]};
+            const body=document.getElementById('knowledgePickerBody');
+            const updates=currentConversation?.knowledge_updates_available||[];
+            body.innerHTML=`<div class="knowledge-picker-modes"><label class="knowledge-picker-mode"><input type="radio" name="ordinaryKbMode" value="augment" ${ordinaryKnowledgeEditing.mode==='augment'?'checked':''}><span><strong>结合回答</strong><span>引用知识库资料，也允许结合模型通用知识。</span></span></label><label class="knowledge-picker-mode"><input type="radio" name="ordinaryKbMode" value="strict" ${ordinaryKnowledgeEditing.mode==='strict'?'checked':''}><span><strong>仅依据知识库</strong><span>只使用所选知识库；证据不足时明确拒答。</span></span></label></div><div class="knowledge-picker-list">${knowledgeBases.length?knowledgeBases.map(item=>`<label class="jinni-kb-option"><input type="checkbox" name="ordinaryKnowledgeBase" value="${escapeHtml(item.id)}" ${ordinaryKnowledgeEditing.knowledge_base_ids.includes(item.id)?'checked':''}><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}${updates.includes(item.id)?' · 有新版本':''}</span></label>`).join(''):'<div class="knowledge-picker-empty">还没有知识库，请先从主导航“知识库”创建并导入资料。</div>'}</div>${updates.length?'<div class="knowledge-picker-error" style="color:#d97706">所选知识库已有新索引版本。应用时可更新当前会话。</div>':'<div id="ordinaryKnowledgeError" class="knowledge-picker-error"></div>'}${updates.length?'<label class="jinni-kb-option" style="margin-top:10px"><input id="refreshOrdinaryKnowledge" type="checkbox"><span>更新到知识库最新版本</span></label>':''}`;
+            document.getElementById('knowledgePickerModal').hidden=false;
+            lucide.createIcons();
+        }
+
+        function closeOrdinaryKnowledgePicker(){
+            document.getElementById('knowledgePickerModal').hidden=true;
+            ordinaryKnowledgeEditing=null;
+        }
+
+        async function saveOrdinaryKnowledge(){
+            const mode=document.querySelector('input[name="ordinaryKbMode"]:checked')?.value||'augment';
+            const ids=[...document.querySelectorAll('input[name="ordinaryKnowledgeBase"]:checked')].map(input=>input.value);
+            const error=document.getElementById('ordinaryKnowledgeError');
+            if(!ids.length){ if(error) error.textContent='请至少选择一个知识库。'; return; }
+            const next={mode,knowledge_base_ids:ids};
+            try{
+                if(currentConversation?.id){
+                    const response=await fetch(`/api/conversations/${currentConversation.id}`,{method:'PATCH',headers:headers(),body:JSON.stringify({knowledge_context:next,refresh_knowledge_generations:!!document.getElementById('refreshOrdinaryKnowledge')?.checked})});
+                    const data=await response.json();
+                    if(!response.ok) throw new Error(data.detail||'保存知识库范围失败');
+                    currentConversation=data.conversation;
+                }else ordinaryKnowledgeDraft=next;
+                closeOrdinaryKnowledgePicker();
+                updateKnowledgeModeControl();
+            }catch(e){ if(error) error.textContent=e.message; }
+        }
+
+        async function clearOrdinaryKnowledge(){
+            const next={mode:'none',knowledge_base_ids:[]};
+            try{
+                if(currentConversation?.id){
+                    const response=await fetch(`/api/conversations/${currentConversation.id}`,{method:'PATCH',headers:headers(),body:JSON.stringify({knowledge_context:next})});
+                    const data=await response.json();
+                    if(!response.ok) throw new Error(data.detail||'清除知识库失败');
+                    currentConversation=data.conversation;
+                }else ordinaryKnowledgeDraft=next;
+                closeOrdinaryKnowledgePicker();
+                updateKnowledgeModeControl();
+            }catch(e){ const error=document.getElementById('ordinaryKnowledgeError'); if(error) error.textContent=e.message; }
         }
 
         async function setConversationKnowledgeMode(next){
@@ -1360,6 +1545,7 @@
             validateSavedProviderState();
             setMode(mode,false);
             updateWorkspaceChrome();
+            updateKnowledgeModeControl();
         }
 
         async function persistJinniRuntimeModel(){
@@ -1893,11 +2079,17 @@
                 const reuseCurrent = isPristineConversation() && !currentJinniSnapshot();
                 if(isPristineConversation() && currentJinniSnapshot()) await discardPristineConversation();
                 restoreGlobalChatSettings();
+                ordinaryKnowledgeDraft={mode:'none',knowledge_base_ids:[]};
                 showChatWorkspace();
                 conversationSearch = '';
                 const searchInput = document.getElementById('conversationSearch');
                 if(searchInput) searchInput.value = '';
                 if(reuseCurrent){
+                    if(currentConversation?.knowledge_context?.mode && currentConversation.knowledge_context.mode!=='none'){
+                        const response=await fetch(`/api/conversations/${currentConversation.id}`,{method:'PATCH',headers:headers(),body:JSON.stringify({knowledge_context:{mode:'none',knowledge_base_ids:[]}})});
+                        const data=await response.json();
+                        if(response.ok) currentConversation=data.conversation;
+                    }
                     setChatTitle(currentConversation.title || '新对话');
                     lastRenderedRunSignature = '';
                     renderMessages([]);
@@ -1925,6 +2117,7 @@
             if(currentConversation?.id) conversationScrollPositions.set(currentConversation.id, document.getElementById('messages')?.scrollTop || 0);
             const data = await fetch(`/api/conversations/${id}`, {headers:{'X-User-ID':userId}}).then(r=>r.json());
             currentConversation = data.conversation;
+            ordinaryKnowledgeDraft={mode:'none',knowledge_base_ids:[]};
             if(currentJinniSnapshot()) applyConversationRuntimeSettings();
             else restoreGlobalChatSettings();
             showChatWorkspace();
@@ -2370,6 +2563,11 @@
                 resolveConfirmDialog(false);
                 return;
             }
+            if(e.key === 'Escape' && !document.getElementById('knowledgePickerModal')?.hidden){
+                e.preventDefault();
+                closeOrdinaryKnowledgePicker();
+                return;
+            }
             if(e.key === 'Escape') closeImagePreview();
         });
 
@@ -2402,7 +2600,7 @@
         function chatRunPayload(message, pendingRefs, requestedSize, clientRequestId){
             const currentProvider = provider;
             const currentMsModel = currentProvider === 'modelscope' ? (msModel || activeChatModel || (config.ms_chat_models?.[0] || '')) : '';
-            return {
+            const payload = {
                 conversation_id: currentConversation?.id || '',
                 client_request_id: clientRequestId,
                 message,
@@ -2416,6 +2614,8 @@
                 reference_images: pendingRefs,
                 provider: mode === 'image' ? activeImageProvider : currentProvider,
             };
+            if(!currentConversation?.id && ordinaryKnowledgeDraft?.mode!=='none') payload.knowledge_context=ordinaryKnowledgeDraft;
+            return payload;
         }
 
         async function sendMessage(){
@@ -2442,6 +2642,7 @@
                 if(!response.ok) throw new Error(data.detail || tr('chat.requestFailed'));
                 const serverMessages = data.conversation?.messages || previousConversation?.messages || [];
                 currentConversation = data.conversation;
+                ordinaryKnowledgeDraft={mode:'none',knowledge_base_ids:[]};
                 currentConversation.messages = [...serverMessages, {id:`pending-${clientRequestId}`, role:'user', content:message, attachments:pendingRefs, created_at:Date.now(), mode}];
                 runStates.set(data.run.id, data.run);
                 rememberConversation(currentConversation.id);
@@ -2476,6 +2677,7 @@
             await Promise.all([loadJinnis(), loadKnowledgeBases()]);
             await loadRuns();
             await loadConversations();
+            updateKnowledgeModeControl();
             updateComposerState();
             updateComposerOverflow();
         };

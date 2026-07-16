@@ -11,7 +11,7 @@ from fastapi import APIRouter, File, Header, HTTPException, Request, UploadFile
 from ..config import settings
 from ..domain.schemas import (EmbeddingProfileCreate, KnowledgeBaseCreate, KnowledgeBaseUpdate,
                               MaintenanceCreate, SearchRequest, TextEntryCreate)
-from ..parsers.documents import SUPPORTED_EXTENSIONS
+from ..parsers.documents import SUPPORTED_EXTENSIONS, TEXT_EXTENSIONS, parse_document
 from ..repositories import get_repository
 from ..retrieval import RetrievalService
 from ..vectorstores import create_vector_store
@@ -128,6 +128,83 @@ async def upload_documents(knowledge_base_id: str, request: Request, files: List
             target.unlink(missing_ok=True)
             raise
     return {"items": created}
+
+
+@router.get("/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}/preview")
+async def preview_document(knowledge_base_id: str, document_id: str, request: Request, view: str = "read",
+                           cursor: int = 0, limit: int = 100, x_user_id: str = Header(default="")):
+    user_id = safe_user_id(x_user_id, request)
+    repository = get_repository()
+    knowledge_base = require_base(repository, user_id, knowledge_base_id)
+    document = repository.get_document(user_id, document_id)
+    if not document or document.get("knowledge_base_id") != knowledge_base_id:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    if view not in {"read", "chunks", "raw"}:
+        raise HTTPException(status_code=400, detail="不支持的预览视图")
+    cursor = max(0, int(cursor or 0))
+    limit = max(1, min(200, int(limit or 100)))
+    extension = Path(document.get("original_name") or "").suffix.lower()
+    public_document = {key: document.get(key) for key in (
+        "id", "title", "source_type", "original_name", "mime_type", "status", "error", "chunk_count"
+    )}
+
+    if view == "chunks":
+        rows = repository.preview_document_chunks(
+            user_id, document_id, int(knowledge_base.get("active_generation") or 1), cursor, limit
+        )
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        return {"document": public_document, "format": extension.lstrip(".") or "text", "view": view,
+                "blocks": rows, "next_cursor": cursor + len(rows) if has_more else None,
+                "truncated": has_more}
+
+    path = Path(document.get("content_path") or "")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="文档源文件已丢失，无法预览")
+    try:
+        if view == "raw" and extension in TEXT_EXTENSIONS:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            parsed = [{"text": text, "section": "", "page": None, "kind": "source"}]
+        else:
+            parsed = [
+                {"text": item.text, "section": item.section, "page": item.page, "kind": item.kind}
+                for item in parse_document(str(path), document.get("original_name") or path.name)
+            ]
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"文档解析失败：{exc}") from exc
+
+    # Split unusually large paragraphs/source files into cursor-addressable
+    # blocks so "continue loading" never loses the tail of a document.
+    pageable = []
+    for item in parsed:
+        text = str(item.get("text") or "")
+        if not text:
+            continue
+        for start in range(0, len(text), 100_000):
+            part = dict(item)
+            part["text"] = text[start:start + 100_000]
+            pageable.append(part)
+    parsed = pageable
+
+    char_budget = 200_000
+    selected, used, index = [], 0, cursor
+    while index < len(parsed) and len(selected) < limit:
+        item = dict(parsed[index])
+        text = str(item.get("text") or "")
+        remaining = char_budget - used
+        if remaining <= 0:
+            break
+        if len(text) > remaining:
+            item["text"] = text[:remaining]
+            item["content_truncated"] = True
+        selected.append(item)
+        used += len(item["text"])
+        index += 1
+        if item.get("content_truncated"):
+            break
+    has_more = index < len(parsed)
+    return {"document": public_document, "format": extension.lstrip(".") or "text", "view": view,
+            "blocks": selected, "next_cursor": index if has_more else None, "truncated": has_more}
 
 
 @router.post("/api/knowledge-bases/{knowledge_base_id}/entries")
