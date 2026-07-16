@@ -758,7 +758,8 @@ def default_api_providers():
             "image_request_mode": "openai",
             "image_generation_endpoint": "",
             "image_edit_endpoint": "",
-            "enabled": True,
+            # 内置入口仅作为可选模板保留；配置 API Key 后由设置页启用。
+            "enabled": False,
             "primary": False,
             "image_models": MODELSCOPE_DEFAULT_IMAGE_MODELS,
             "chat_models": MODELSCOPE_CHAT_MODELS,
@@ -774,7 +775,8 @@ def default_api_providers():
             "image_request_mode": "openai",
             "image_generation_endpoint": "",
             "image_edit_endpoint": "",
-            "enabled": True,
+            # RunningHub 不应在未配置 Key 时进入模型选择器。
+            "enabled": False,
             "primary": False,
             "image_models": [],
             "chat_models": [],

@@ -761,12 +761,16 @@ function syncEditor(){
     item.rh_apps = normalizeRhEntries(item.rh_apps || [], 'app');
     item.rh_workflows = normalizeRhEntries(item.rh_workflows || [], 'workflow');
     const key = keyInput.value.trim();
-    if(key) item.api_key = key;
+    if(key){
+        item.api_key = key;
+        if(item.id === 'modelscope') item.enabled = true;
+    }
     if(item.id === 'runninghub'){
         const freeKey = rhFreeKeyInput?.value.trim() || '';
         const walletKey = rhWalletKeyInput?.value.trim() || '';
         if(freeKey) item.api_key = freeKey;
         if(walletKey) item.wallet_api_key = walletKey;
+        if(freeKey || walletKey) item.enabled = true;
     }
     if(item.id === 'volcengine'){
         const ak = volcAkInput?.value.trim() || '';
@@ -3212,6 +3216,7 @@ async function saveKeyOnly(){
     const key = keyInput.value.trim();
     if(!key){ alert(tr('api.enterKeyAlert') || '请输入 Key'); return; }
     item.api_key = key;
+    if(item.id === 'modelscope' || item.id === 'runninghub') item.enabled = true;
     const ok = await saveProviders();
     if(ok) keyInput.value = '';
 }
@@ -3221,6 +3226,7 @@ async function clearKeyOnly(){
     if(!item.has_key && !keyInput.value){ return; }
     if(!confirm(tr('api.confirmClearKey') || '确认清除当前 Key？')) return;
     item._clearKey = true;
+    if(item.id === 'modelscope' || (item.id === 'runninghub' && !item.has_wallet_key)) item.enabled = false;
     const ok = await saveProviders();
     if(ok) keyInput.value = '';
 }
@@ -3429,6 +3435,8 @@ async function clearRhKeyOnly(kind){
     if(!confirm(tr('api.confirmClearKey') || '确认清除当前 Key？')) return;
     if(kind === 'wallet') item._clearWalletKey = true;
     else item._clearKey = true;
+    const keepsOtherKey = kind === 'wallet' ? item.has_key : item.has_wallet_key;
+    if(!keepsOtherKey) item.enabled = false;
     const ok = await saveProviders();
     if(ok){
         if(kind === 'wallet' && rhWalletKeyInput) rhWalletKeyInput.value = '';

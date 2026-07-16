@@ -618,6 +618,35 @@ function uniqueModels(list){
         return true;
     });
 }
+function providerReadyForCanvasSelection(provider){
+    if(!provider || provider.enabled === false) return false;
+    const id = String(provider.id || '').trim().toLowerCase();
+    if(id === 'modelscope') return provider.has_key === true;
+    if(isRunningHubProvider(provider)) return provider.has_key === true || provider.has_wallet_key === true;
+    return true;
+}
+function hasConfiguredCanvasProvider(id){
+    const expected = String(id || '').trim().toLowerCase();
+    return apiProviders.some(provider => String(provider?.id || '').trim().toLowerCase() === expected && providerReadyForCanvasSelection(provider));
+}
+function refreshCanvasProviderVisibility(){
+    document.querySelectorAll('[data-provider-required]').forEach(element => {
+        element.hidden = !hasConfiguredCanvasProvider(element.dataset.providerRequired);
+    });
+}
+function canvasRatioLabel(value){
+    const labels = langIsEn() ? {
+        '1:1':'Square', '2:3':'Portrait', '3:2':'Landscape', '3:4':'Portrait', '4:3':'Landscape',
+        '9:16':'Mobile portrait', '16:9':'Widescreen', '21:9':'Ultrawide', '9:21':'Tall portrait',
+        keep_ratio:'Keep source ratio', adaptive:'Adaptive'
+    } : {
+        '1:1':'方图', '2:3':'竖图', '3:2':'横图', '3:4':'竖版', '4:3':'横版',
+        '9:16':'手机竖屏', '16:9':'宽屏', '21:9':'超宽屏', '9:21':'超长竖屏',
+        keep_ratio:'保持原比例', adaptive:'自适应'
+    };
+    const suffix = labels[value] || '';
+    return suffix ? `${value.includes(':') ? value + ' ' : ''}${suffix}` : value;
+}
 function defaultApiProviders(){
     return [{id:'comfly', name:'Comfly', base_url:'', enabled:true, image_models:imageModels, chat_models:chatModels, video_models:videoModels.length ? videoModels : DEFAULT_VIDEO_MODELS, has_key:false, key_preview:''}];
 }
@@ -632,7 +661,7 @@ function normalizeProviderId(value){
 }
 function imageApiProviders(){
     const providers = (apiProviders.length ? apiProviders : defaultApiProviders())
-        .filter(p => p.id !== 'modelscope' && p.enabled !== false && (p.image_models || []).length);
+        .filter(p => providerReadyForCanvasSelection(p) && (p.image_models || []).length);
     return providers;
 }
 function providerById(id){
@@ -643,7 +672,7 @@ function resolveProviderId(id){
 }
 function chatApiProviders(){
     const providers = (apiProviders.length ? apiProviders : defaultApiProviders())
-        .filter(p => p.enabled !== false && (p.chat_models || []).length);
+        .filter(p => providerReadyForCanvasSelection(p) && (p.chat_models || []).length);
     return providers.length ? providers : defaultApiProviders();
 }
 function resolveChatProviderId(id){
@@ -721,7 +750,7 @@ function sanitizeImageNodeProviderModel(node){
 }
 function videoApiProviders(){
     const providers = (apiProviders.length ? apiProviders : defaultApiProviders())
-        .filter(p => p.id !== 'modelscope' && p.enabled !== false && (p.video_models || []).length);
+        .filter(p => providerReadyForCanvasSelection(p) && (p.video_models || []).length);
     return providers.length ? providers : defaultApiProviders();
 }
 function resolveVideoProviderId(id){
@@ -1526,6 +1555,7 @@ async function loadConfig(){
         msChatModels = cfg.ms_chat_models?.length ? cfg.ms_chat_models : msChatModels;
         comfyBackendCount = Math.max(1, (cfg.comfy_instances || []).length || 1);
         apiProviders = Array.isArray(cfg.api_providers) && cfg.api_providers.length ? cfg.api_providers : defaultApiProviders();
+        refreshCanvasProviderVisibility();
         models.nano = imageModels.find(m => m.toLowerCase().includes('nano')) || 'nano-banana-pro';
         models.gpt = imageModels.find(m => !m.toLowerCase().includes('nano')) || cfg.image_model || 'gpt-image-2';
         try {
@@ -1542,6 +1572,7 @@ async function loadConfig(){
         }));
     } catch(e) {
         apiProviders = defaultApiProviders();
+        refreshCanvasProviderVisibility();
     }
 }
 
@@ -1949,7 +1980,7 @@ async function createSmartCanvas(){
 }
 function openSmartCanvasPage(id){
     if(!id) return;
-    window.location.href = `/static/smart-canvas.html?id=${encodeURIComponent(id)}&v=2026.05.22.1`;
+    window.location.href = `/static/smart-canvas.html?id=${encodeURIComponent(id)}&v=2026.07.16.2`;
 }
 function toggleEmojiPicker(id, event){
     event?.preventDefault();
@@ -2496,7 +2527,7 @@ function requestedCanvasListProject(){
 
 function canvasListUrlForProject(projectId){
     const pid = rememberCanvasListProject(projectId);
-    return `/static/canvas-list.html?project=${encodeURIComponent(pid)}`;
+    return `/static/canvas-list.html?project=${encodeURIComponent(pid)}&v=2026.07.16.2`;
 }
 
 function addNode(node){
@@ -2756,15 +2787,15 @@ function renderMsGenBody(node){
                     <option value="custom">${tr('canvas.custom')}</option>
                 </select>
                 <select class="select-lite ratio compact-select" data-field="msRatio">
-                    <option value="square">1:1</option>
-                    <option value="portrait">2:3</option>
-                    <option value="landscape">3:2</option>
-                        <option value="portrait43">3:4</option>
-                        <option value="landscape43">4:3</option>
-                        <option value="story">9:16</option>
-                        <option value="wide">16:9</option>
-                        <option value="ultrawide">21:9</option>
-                        <option value="ultratall">9:21</option>
+                    <option value="square">${canvasRatioLabel('1:1')}</option>
+                    <option value="portrait">${canvasRatioLabel('2:3')}</option>
+                    <option value="landscape">${canvasRatioLabel('3:2')}</option>
+                        <option value="portrait43">${canvasRatioLabel('3:4')}</option>
+                        <option value="landscape43">${canvasRatioLabel('4:3')}</option>
+                        <option value="story">${canvasRatioLabel('9:16')}</option>
+                        <option value="wide">${canvasRatioLabel('16:9')}</option>
+                        <option value="ultrawide">${canvasRatioLabel('21:9')}</option>
+                        <option value="ultratall">${canvasRatioLabel('9:21')}</option>
                         <option value="custom">${tr('canvas.custom')}</option>
                     </select>
                     <div class="gen-count-row">
@@ -3183,7 +3214,7 @@ function addComfyNode(point){
 }
 function addOutputNode(point){
     const p = point || defaultPoint(260, 0);
-    return addNode({id:uid('out'), type:'output', x:p.x, y:p.y, images:[]});
+    return addNode({id:uid('out'), type:'output', x:p.x, y:p.y, images:[], texts:[], activeTextVersions:{}, textViewModes:{}});
 }
 function openCreateMenu(clientX, clientY){
     menuPoint = screenToWorld(clientX, clientY);
@@ -3204,10 +3235,11 @@ function linkCreateOptions(state){
     if(state.originKind === 'out'){
         if(['image','prompt','loop','group','promptGroup','llm','output'].includes(node.type)){
             return [
+                ...(node.type === 'llm' ? [{type:'output', label:'Output', icon:'panel-top'}] : []),
                 {type:'generator', label:tr('canvas.apiGenerate'), icon:'wand-sparkles'},
-                {type:'msgen', label:tr('canvas.modelscopeGenerate'), icon:'cloud-lightning'},
+                ...(hasConfiguredCanvasProvider('modelscope') ? [{type:'msgen', label:tr('canvas.modelscopeGenerate'), icon:'cloud-lightning'}] : []),
                 {type:'comfy', label:tr('canvas.comfyGenerate'), icon:'workflow'},
-                {type:'rh', label:tr('canvas.rhGenerate'), icon:'workflow'},
+                ...(hasConfiguredCanvasProvider('runninghub') ? [{type:'rh', label:tr('canvas.rhGenerate'), icon:'workflow'}] : []),
                 {type:'ltxDirector', label:tr('canvas.ltxDirector'), icon:'film'},
                 {type:'video', label:tr('canvas.videoGenerateNode'), icon:'clapperboard'},
                 ...(node.type === 'output' ? [] : [{type:'llm', label:'LLM', icon:'message-square-text'}])
@@ -3217,6 +3249,7 @@ function linkCreateOptions(state){
     }
     if(CANVAS_GENERATOR_TYPES.includes(node.type) || node.type === 'llm'){
         return [
+            ...(node.type === 'llm' ? [{type:'output', label:'Output', icon:'panel-top'}] : []),
             {type:'image', label:tr('canvas.imageCard'), icon:'image-plus'},
             {type:'prompt', label:tr('canvas.prompt'), icon:'text-cursor-input'},
             {type:'loop', label:tr('canvas.loopNode'), icon:'repeat-2'},
@@ -3256,7 +3289,7 @@ function openGeneratorNodeMenu(nodeId, clientX, clientY){
         {type:'output', label:'Output', icon:'circle-dot'},
         ...(CANVAS_IMAGE_OUTPUT_TYPES.includes(node.type) ? [
             {type:'generator', label:tr('canvas.apiGenerate'), icon:'wand-sparkles'},
-            {type:'msgen', label:tr('canvas.modelscopeGenerate'), icon:'cloud-lightning'},
+            ...(hasConfiguredCanvasProvider('modelscope') ? [{type:'msgen', label:tr('canvas.modelscopeGenerate'), icon:'cloud-lightning'}] : []),
             {type:'comfy', label:tr('canvas.comfyGenerate'), icon:'workflow'},
             {type:'ltxDirector', label:tr('canvas.ltxDirector'), icon:'film'},
             {type:'video', label:tr('canvas.videoGenerateNode'), icon:'clapperboard'}
@@ -6123,7 +6156,7 @@ function destroyLTXEditor(node){
     node._ltxEditor = null;
 }
 function isNodeDragSurface(target){
-    return !isNodeControl(target) && !target.closest('.port, .resize-handle, .output-img-wrap');
+    return !isNodeControl(target) && !target.closest('.port, .resize-handle, .output-img-wrap, .output-text-card');
 }
 function renderNode(node){
     normalizeApiNodeLayout(node);
@@ -6343,6 +6376,7 @@ function renderNode(node){
             e.stopPropagation();
         };
         body.querySelectorAll('.output-img-wrap').forEach(wrap => bindOutputWrap(wrap, node));
+        bindOutputTextControls(body, node);
     }
     el.appendChild(body);
     el.querySelectorAll('button, select, textarea, input').forEach(control => {
@@ -6470,6 +6504,7 @@ function refreshOutputNodeContent(node){
     const body = el?.querySelector('.node-body');
     const grid = body?.querySelector('.output-grid');
     if(!body || !grid) return false;
+    if((node.texts || []).length || body.querySelector('.output-text-sections')) return false;
     body.onwheel = e => { e.stopPropagation(); };
     const layout = outputGridLayout(node);
     grid.classList.toggle('grid-layout', !!layout);
@@ -8269,6 +8304,7 @@ function llmInputText(node){
         if(n.type === 'loop') return renderLoopPrompt(n);
         if(n.type === 'promptGroup') return canvasGroupMemberNodes(n).map(p => p.text || '').filter(Boolean).join('\n\n');
         if(n.type === 'llm') return n.outputText || '';
+        if(n.type === 'output') return latestOutputTexts(n).map(item => item.content || '').filter(Boolean).join('\n\n');
         return '';
     }).filter(Boolean).join('\n\n');
 }
@@ -8329,15 +8365,15 @@ function renderGeneratorBody(node){
                 </select>
                 <select class="select-lite ratio compact-select" data-field="ratio">
                     <option value="" disabled>自定义尺寸</option>
-                    <option value="square">1:1</option>
-                    <option value="portrait">2:3</option>
-                    <option value="landscape">3:2</option>
-                    <option value="portrait43">3:4</option>
-                    <option value="landscape43">4:3</option>
-                    <option value="story">9:16</option>
-                    <option value="wide">16:9</option>
-                    <option value="ultrawide">21:9</option>
-                    <option value="ultratall">9:21</option>
+                    <option value="square">${canvasRatioLabel('1:1')}</option>
+                    <option value="portrait">${canvasRatioLabel('2:3')}</option>
+                    <option value="landscape">${canvasRatioLabel('3:2')}</option>
+                    <option value="portrait43">${canvasRatioLabel('3:4')}</option>
+                    <option value="landscape43">${canvasRatioLabel('4:3')}</option>
+                    <option value="story">${canvasRatioLabel('9:16')}</option>
+                    <option value="wide">${canvasRatioLabel('16:9')}</option>
+                    <option value="ultrawide">${canvasRatioLabel('21:9')}</option>
+                    <option value="ultratall">${canvasRatioLabel('9:21')}</option>
                     <option value="source">${tr('canvas.adaptiveRatio')}</option>
                     <option value="custom">${tr('canvas.custom')}</option>
                 </select>
@@ -8684,15 +8720,15 @@ function renderVideoBody(node){
                 <label class="field" style="flex:1">
                     <div class="setting-title">${tr('canvas.videoAspect')}</div>
                     <select class="select-lite video-aspect compact-select">
-                        <option value="16:9">16:9</option>
-                        <option value="9:16">9:16</option>
-                        <option value="1:1">1:1</option>
-                        <option value="4:3">4:3</option>
-                        <option value="3:4">3:4</option>
-                        <option value="21:9">21:9</option>
-                        <option value="9:21">9:21</option>
-                        <option value="keep_ratio">keep</option>
-                        <option value="adaptive">adapt</option>
+                        <option value="16:9">${canvasRatioLabel('16:9')}</option>
+                        <option value="9:16">${canvasRatioLabel('9:16')}</option>
+                        <option value="1:1">${canvasRatioLabel('1:1')}</option>
+                        <option value="4:3">${canvasRatioLabel('4:3')}</option>
+                        <option value="3:4">${canvasRatioLabel('3:4')}</option>
+                        <option value="21:9">${canvasRatioLabel('21:9')}</option>
+                        <option value="9:21">${canvasRatioLabel('9:21')}</option>
+                        <option value="keep_ratio">${canvasRatioLabel('keep_ratio')}</option>
+                        <option value="adaptive">${canvasRatioLabel('adaptive')}</option>
                     </select>
                 </label>
                 <label class="field" style="flex:1">
@@ -10074,12 +10110,12 @@ function hasDownstreamGenerator(nodeId){
         if(c.from !== nodeId) return false;
         const to = nodes.find(n => n.id === c.to);
         if(!to) return false;
-        if(CANVAS_GENERATOR_TYPES.includes(to.type)) return true;
+        if(CANVAS_GENERATOR_TYPES.includes(to.type) || to.type === 'llm') return true;
         if(to.type !== 'output') return false;
         return connections.some(cc => {
             if(cc.from !== to.id) return false;
             const next = nodes.find(n => n.id === cc.to);
-            return next && CANVAS_GENERATOR_TYPES.includes(next.type);
+            return next && (CANVAS_GENERATOR_TYPES.includes(next.type) || next.type === 'llm');
         });
     });
 }
@@ -10095,7 +10131,7 @@ function outputForNode(node, dx=460){
         .map(c => nodes.find(n => n.id === c.to))
         .find(n => n?.type === 'output');
     if(!out){
-        out = {id:uid('out'), type:'output', x:node.x + dx, y:node.y, images:[]};
+        out = {id:uid('out'), type:'output', x:node.x + dx, y:node.y, images:[], texts:[], activeTextVersions:{}, textViewModes:{}};
         nodes.push(out);
         connections.push({id:uid('c'), from:node.id, to:out.id});
     }
@@ -10124,7 +10160,9 @@ function appendOutputImagesWithoutDuplicates(out, images, compareRef=null, metas
 function syncLatestGeneratedOutputToConnection(fromId, toId){
     const source = nodes.find(n => n.id === fromId);
     const out = nodes.find(n => n.id === toId);
-    if(!source || !out || out.type !== 'output' || !CANVAS_MEDIA_OUTPUT_TYPES.includes(source.type)) return false;
+    if(!source || !out || out.type !== 'output') return false;
+    if(source.type === 'llm') return Boolean(appendOutputText(out, source.outputText, source, {sourceMode:source.mode || 'node'}));
+    if(!CANVAS_MEDIA_OUTPUT_TYPES.includes(source.type)) return false;
     const latest = latestGeneratedOutputItem(source);
     if(!latest) return false;
     return appendOutputImagesWithoutDuplicates(out, [latest]) > 0;
@@ -10175,15 +10213,23 @@ function mediaRefsFromNode(node){
 }
 function generatorSources(gen){
     return connections.filter(c => c.to === gen.id).map(c => nodes.find(n => n.id === c.from)).filter(Boolean).map(n => {
-        if(n.type === 'output' && (n.images||[]).length){
-            // 从 output 节点取最新一张图当作 reference 给下游
-            const reversed = [...n.images].map((item, index) => ({item, index})).reverse();
+        if(n.type === 'output'){
+            const sources = latestOutputTexts(n).map((item, index) => ({
+                id:`${n.id}:text:${item.sourceNodeId || index}`,
+                type:'outputText',
+                label:(item.content || (langIsEn() ? 'Text output' : '文本输出')).slice(0, 32),
+                refs:[],
+                prompt:item.content || ''
+            }));
+            // 媒体与文本可同时存在；媒体仍取最近一项作为下游参考。
+            const reversed = [...(n.images || [])].map((item, index) => ({item, index})).reverse();
             const found = reversed.find(entry => outputUrlValue(entry.item));
             if(found){
                 const last = outputUrlValue(found.item);
                 const kind = mediaKindForOutputItem(found.item);
-                return {id:n.id, type:'outputImage', label:'上游输出', preview:last, refs:[{url:last, name:'output.png', kind, nodeId:n.id, outputIndex:found.index}], prompt:''};
+                sources.unshift({id:`${n.id}:media`, type:'outputImage', label:'上游输出', preview:last, refs:[{url:last, name:'output.png', kind, nodeId:n.id, outputIndex:found.index}], prompt:''});
             }
+            if(sources.length) return sources;
         }
         if(CANVAS_MEDIA_OUTPUT_TYPES.includes(n.type)){
             const refs = generatedImageRefs(n);
@@ -10263,6 +10309,13 @@ function orderedSources(gen, sources){
     gen.inputs = (gen.inputs || []).filter(id => sources.some(s => s.id === id));
     sources.forEach(s => { if(!gen.inputs.includes(s.id)) gen.inputs.push(s.id); });
     return gen.inputs.map(id => sources.find(s => s.id === id)).filter(Boolean);
+}
+function syncLLMTextOutputs(node, content, sourceMode='node'){
+    if(!node || !String(content || '').trim()) return [];
+    const target = outputForNode(node);
+    const outputs = [...new Map([...outputNodesForSource(node.id), target].filter(Boolean).map(out => [out.id, out])).values()];
+    outputs.forEach(out => appendOutputText(out, content, node, {sourceMode}));
+    return outputs;
 }
 function sourceHasPrimaryReference(src){
     if(src?.primaryReference) return true;
@@ -11407,9 +11460,10 @@ async function runLLMNode(nodeId, opts={}){
     if(!opts.cascade){ node.running = true; refreshNodes([node.id]); }
     try {
         node.outputText = await callCanvasLLM(node, input, [], {cascadeTargetId});
+        const textOutputs = syncLLMTextOutputs(node, node.outputText, 'node');
         if(!opts.cascade) node.running = false;
         node.runStatus = 'done'; node.runError = '';
-        refreshNodes([node.id]);
+        refreshNodes([node.id, ...textOutputs.map(out => out.id)]);
         scheduleSave();
     } catch(err) {
         if(!opts.cascade) node.running = false;
@@ -11841,8 +11895,9 @@ async function runLLMChat(nodeId){
         const text = await callCanvasLLM(node, message, history);
         node.messages.push({role:'assistant', content:text});
         node.outputText = text;
+        const textOutputs = syncLLMTextOutputs(node, text, 'chat');
         node.running = false;
-        refreshNodes([node.id]);
+        refreshNodes([node.id, ...textOutputs.map(out => out.id)]);
         scheduleSave();
     } catch(err) {
         node.running = false;
@@ -11873,9 +11928,12 @@ function clearNodeContentBeforeDelete(id){
         scheduleSave();
         return true;
     }
-    if(node.type === 'output' && ((node.images || []).length || (node._pending || []).length)){
+    if(node.type === 'output' && ((node.images || []).length || (node.texts || []).length || (node._pending || []).length)){
         pushUndo();
         node.images = [];
+        node.texts = [];
+        node.activeTextVersions = {};
+        node.textViewModes = {};
         node._pending = [];
         node.imageComparisons = {};
         refreshNodes([node.id]);
@@ -12452,11 +12510,134 @@ function outputGridLayout(node){
     const allMatch = images.every(item => item && typeof item === 'object' && item.grid?.groupId === layout.groupId);
     return allMatch ? layout : null;
 }
+function outputTextSourceKey(item){
+    return String(item?.sourceNodeId || 'manual');
+}
+function outputTextGroups(node){
+    const groups = new Map();
+    (node?.texts || []).forEach(item => {
+        if(!item?.content) return;
+        const key = outputTextSourceKey(item);
+        if(!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(item);
+    });
+    return [...groups.entries()].map(([key, items]) => ({key, items}));
+}
+function activeOutputTextItem(node, sourceKey){
+    const group = outputTextGroups(node).find(entry => entry.key === sourceKey);
+    if(!group?.items?.length) return null;
+    const activeId = node?.activeTextVersions?.[sourceKey];
+    return group.items.find(item => item.id === activeId) || group.items[group.items.length - 1];
+}
+function latestOutputTexts(node){
+    return outputTextGroups(node).map(group => activeOutputTextItem(node, group.key)).filter(Boolean);
+}
+function appendOutputText(out, content, source=null, extra={}){
+    const text = String(content || '').trim();
+    if(!out || out.type !== 'output' || !text) return null;
+    const sourceNodeId = String(source?.id || extra.sourceNodeId || 'manual');
+    const item = {
+        id:uid('outtext'), kind:'text', format:'markdown', content:text,
+        sourceNodeId, sourceNodeType:String(source?.type || extra.sourceNodeType || 'llm'),
+        sourceMode:String(extra.sourceMode || source?.mode || 'node'),
+        model:String(extra.model || source?.model || ''), provider:String(extra.provider || source?.llmProvider || ''),
+        createdAt:new Date().toISOString()
+    };
+    const other = (out.texts || []).filter(entry => outputTextSourceKey(entry) !== sourceNodeId);
+    const versions = (out.texts || []).filter(entry => outputTextSourceKey(entry) === sourceNodeId).slice(-49);
+    out.texts = [...other, ...versions, item];
+    out.activeTextVersions = {...(out.activeTextVersions || {}), [sourceNodeId]:item.id};
+    out.textViewModes = out.textViewModes || {};
+    return item;
+}
+function canvasMarkdownHtml(markdown){
+    const codeBlocks = [];
+    let safe = escapeHtml(String(markdown || '')).replace(/```([^\n]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const token = `@@CANVAS_CODE_${codeBlocks.length}@@`;
+        codeBlocks.push(`<pre><code data-language="${escapeAttr(String(lang || '').trim())}">${code}</code></pre>`);
+        return token;
+    });
+    safe = safe
+        .replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
+        .replace(/^##\s+(.+)$/gm, '<h2>$1</h2>')
+        .replace(/^#\s+(.+)$/gm, '<h1>$1</h1>')
+        .replace(/^&gt;\s?(.+)$/gm, '<blockquote>$1</blockquote>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+        .replace(/^[-*]\s+(.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+        .replace(/\n{2,}/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+    codeBlocks.forEach((block, index) => { safe = safe.replace(`@@CANVAS_CODE_${index}@@`, block); });
+    return `<p>${safe}</p>`.replace(/<p>\s*(<(?:h[1-3]|ul|pre|blockquote)>)/g, '$1').replace(/(<\/(?:h[1-3]|ul|pre|blockquote)>)\s*<\/p>/g, '$1');
+}
+function renderOutputTextSections(node){
+    const groups = outputTextGroups(node);
+    if(!groups.length) return '';
+    return `<div class="output-text-sections">${groups.map(group => {
+        const item = activeOutputTextItem(node, group.key);
+        const index = Math.max(0, group.items.findIndex(entry => entry.id === item?.id));
+        const sourceMode = node?.textViewModes?.[group.key] || 'preview';
+        const key = encodeURIComponent(group.key);
+        const meta = [item?.sourceMode === 'chat' ? (langIsEn() ? 'Chat reply' : '对话回复') : (langIsEn() ? 'Node output' : '节点输出'), item?.model].filter(Boolean).join(' · ');
+        return `<section class="output-text-card" data-output-text-source="${escapeAttr(key)}">
+            <div class="output-text-head"><div><strong>${langIsEn() ? 'Text output' : '文本输出'}</strong><small>${escapeHtml(meta)}</small></div><div class="output-text-actions">
+                <button type="button" data-output-text-action="toggle" title="${langIsEn() ? 'Preview / source' : '预览 / 源码'}"><i data-lucide="${sourceMode === 'source' ? 'eye' : 'code-2'}"></i></button>
+                <button type="button" data-output-text-action="copy" title="${langIsEn() ? 'Copy' : '复制'}"><i data-lucide="copy"></i></button>
+                <button type="button" data-output-text-action="download" title="${langIsEn() ? 'Download Markdown' : '下载 Markdown'}"><i data-lucide="download"></i></button>
+                <button type="button" data-output-text-action="prompt" title="${langIsEn() ? 'Convert to prompt' : '转为提示词'}"><i data-lucide="text-cursor-input"></i></button>
+                <button type="button" data-output-text-action="delete" title="${langIsEn() ? 'Delete this version' : '删除此版本'}"><i data-lucide="trash-2"></i></button>
+            </div></div>
+            <div class="output-text-content ${sourceMode === 'source' ? 'source-view' : 'markdown-view'}">${sourceMode === 'source' ? `<pre>${escapeHtml(item?.content || '')}</pre>` : canvasMarkdownHtml(item?.content || '')}</div>
+            ${group.items.length > 1 ? `<div class="output-text-versions"><button type="button" data-output-text-action="prev" ${index <= 0 ? 'disabled' : ''}><i data-lucide="chevron-left"></i></button><span>${index + 1}/${group.items.length}</span><button type="button" data-output-text-action="next" ${index >= group.items.length - 1 ? 'disabled' : ''}><i data-lucide="chevron-right"></i></button></div>` : ''}
+        </section>`;
+    }).join('')}</div>`;
+}
+function downloadOutputTextItem(item){
+    if(!item?.content) return;
+    const blob = new Blob([item.content], {type:'text/markdown;charset=utf-8'});
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `canvas-output-${new Date().toISOString().replace(/[:.]/g, '-')}.md`;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+function bindOutputTextControls(container, node){
+    container.querySelectorAll('[data-output-text-action]').forEach(button => {
+        button.onclick = async event => {
+            event.preventDefault(); event.stopPropagation();
+            const card = button.closest('[data-output-text-source]');
+            const sourceKey = decodeURIComponent(card?.dataset.outputTextSource || 'manual');
+            const group = outputTextGroups(node).find(entry => entry.key === sourceKey);
+            const item = activeOutputTextItem(node, sourceKey);
+            if(!group || !item) return;
+            const index = group.items.findIndex(entry => entry.id === item.id);
+            const action = button.dataset.outputTextAction;
+            if(action === 'toggle') node.textViewModes = {...(node.textViewModes || {}), [sourceKey]:(node.textViewModes?.[sourceKey] === 'source' ? 'preview' : 'source')};
+            if(action === 'copy') await copyTextToClipboard(item.content);
+            if(action === 'download') downloadOutputTextItem(item);
+            if(action === 'prompt') {
+                const prompt = addPromptNode({x:node.x + (node.w || 460) + 80, y:node.y});
+                prompt.text = item.content;
+                selected.clear(); selected.add(prompt.id);
+            }
+            if(action === 'delete') {
+                node.texts = (node.texts || []).filter(entry => entry.id !== item.id);
+                const remaining = outputTextGroups(node).find(entry => entry.key === sourceKey)?.items || [];
+                node.activeTextVersions = {...(node.activeTextVersions || {}), [sourceKey]:remaining.at(-1)?.id || ''};
+            }
+            if(action === 'prev' && index > 0) node.activeTextVersions = {...(node.activeTextVersions || {}), [sourceKey]:group.items[index - 1].id};
+            if(action === 'next' && index < group.items.length - 1) node.activeTextVersions = {...(node.activeTextVersions || {}), [sourceKey]:group.items[index + 1].id};
+            if(action !== 'copy' && action !== 'download') { refreshNodes([node.id]); scheduleSave(); }
+        };
+    });
+}
 function renderOutputGrid(node, pendingHtml=''){
     const layout = outputGridLayout(node);
     const gridClass = layout ? 'output-grid grid-layout' : 'output-grid';
     const style = layout ? ` style="--grid-cols:${Math.max(1, Number(layout.cols || 1))}"` : '';
-    return `<div class="${gridClass}"${style}>${(node.images || []).map(item => renderOutputMedia(item, !!layout)).join('')}${pendingHtml}</div>`;
+    return `${renderOutputTextSections(node)}<div class="${gridClass}"${style}>${(node.images || []).map(item => renderOutputMedia(item, !!layout)).join('')}${pendingHtml}</div>`;
 }
 function outputImageName(url){
     const clean = (url || '').split('?')[0];
@@ -13985,10 +14166,10 @@ function startLink(e, originId, originKind){
                 render();
             }
         } else if(originKind === 'out'){
-            if(source && CANVAS_GENERATOR_TYPES.includes(source.type)){
+            if(source && (CANVAS_GENERATOR_TYPES.includes(source.type) || source.type === 'llm')){
                 const p = screenToWorld(e2.clientX, e2.clientY);
                 pushUndo();
-                const out = {id:uid('out'), type:'output', x:p.x, y:p.y - 63, images:[]};
+                const out = {id:uid('out'), type:'output', x:p.x, y:p.y - 63, images:[], texts:[], activeTextVersions:{}, textViewModes:{}};
                 nodes.push(out);
                 connections.push({id:uid('c'), from:source.id, to:out.id});
                 syncLatestGeneratedOutputToConnection(source.id, out.id);
@@ -14062,7 +14243,7 @@ function canConnect(fromId, toId){
         return allowImage || allowPrompt;
     }
     if(to.type === 'llm') return ['prompt','loop','promptGroup','llm','image','group','output'].includes(from.type);
-    if(from.type === 'llm') return CANVAS_GENERATOR_TYPES.includes(to.type);
+    if(from.type === 'llm') return to.type === 'output' || CANVAS_GENERATOR_TYPES.includes(to.type);
     return CANVAS_GENERATOR_TYPES.includes(to.type) && ['image','prompt','loop','group','promptGroup','output','llm'].includes(from.type);
 }
 function sanitizeConnections(){

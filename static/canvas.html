@@ -20,8 +20,8 @@
     <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/touch-mouse.js?v=2026.07.4.2.1783154122"></script>
-    <script src="/static/js/i18n.js?v=2026.07.4.2.1784029505"></script>
-    <link rel="stylesheet" href="/static/css/canvas.css?v=2026.07.4.2.1783582933">
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1784104411"></script>
+    <link rel="stylesheet" href="/static/css/canvas.css?v=2026.07.4.2.1784209481">
     <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
 </head>
 <body>
@@ -71,9 +71,9 @@
                 <button class="menu-btn" onclick="menuAdd('loop')"><i data-lucide="repeat-2" class="w-4 h-4"></i><span data-i18n="canvas.loopNode">循环节点</span></button>
                 <button class="menu-btn" onclick="menuAdd('llm')"><i data-lucide="message-square-text" class="w-4 h-4"></i><span data-i18n="canvas.llmNode">LLM 节点</span></button>
                 <button class="menu-btn" onclick="menuAdd('generator')"><i data-lucide="wand-sparkles" class="w-4 h-4"></i><span data-i18n="canvas.apiGenerate">API生成</span></button>
-                <button class="menu-btn" onclick="menuAdd('msgen')"><i data-lucide="cloud-lightning" class="w-4 h-4"></i><span data-i18n="canvas.modelscopeGenerate">Modelscope生成</span></button>
+                <button class="menu-btn" data-provider-required="modelscope" onclick="menuAdd('msgen')"><i data-lucide="cloud-lightning" class="w-4 h-4"></i><span data-i18n="canvas.modelscopeGenerate">Modelscope生成</span></button>
                 <button class="menu-btn" onclick="menuAdd('video')"><i data-lucide="clapperboard" class="w-4 h-4"></i><span data-i18n="canvas.videoGenerateNode">视频生成</span></button>
-                <button class="menu-btn" onclick="menuAdd('rh')"><i data-lucide="workflow" class="w-4 h-4"></i><span data-i18n="canvas.rhGenerate">RH生成</span></button>
+                <button class="menu-btn" data-provider-required="runninghub" onclick="menuAdd('rh')"><i data-lucide="workflow" class="w-4 h-4"></i><span data-i18n="canvas.rhGenerate">RH生成</span></button>
                 <button class="menu-btn" onclick="menuAdd('comfy')"><i data-lucide="workflow" class="w-4 h-4"></i><span data-i18n="canvas.comfyGenerate">ComfyUI 生成</span></button>
                 <button class="menu-btn" onclick="menuAdd('ltxDirector')"><i data-lucide="film" class="w-4 h-4"></i><span data-i18n="canvas.ltxDirector">LTX Director</span></button>
                 <button class="menu-btn" onclick="menuAdd('output')"><i data-lucide="circle-dot" class="w-4 h-4"></i>Output</button>
@@ -352,6 +352,6 @@
     </div>
 
     <script src="/static/js/ltx-director-timeline.js?v=2026.07.4.2.1783154122"></script>
-    <script src="/static/js/canvas.js?v=2026.07.4.2.1784029478"></script>
+    <script src="/static/js/canvas.js?v=2026.07.4.2.1784210531"></script>
 </body>
 </html>

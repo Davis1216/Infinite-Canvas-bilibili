@@ -1701,13 +1701,19 @@
             const seen = new Set();
             return (list || []).map(item => String(item || '').trim()).filter(item => item && !seen.has(item) && seen.add(item));
         }
+        function providerReadyForSelection(item){
+            if(!item || item.enabled === false) return false;
+            if(item.id === 'modelscope') return item.has_key === true;
+            if(item.id === 'runninghub') return item.has_key === true || item.has_wallet_key === true;
+            return true;
+        }
         function chatProviders(){
-            const list = (apiProviders || []).filter(p => p.enabled !== false && (p.chat_models || []).length);
-            if(config.ms_chat_models?.length && !list.some(p => p.id === 'modelscope')) list.push({id:'modelscope', name:'ModelScope', chat_models:config.ms_chat_models, image_models:[]});
+            const list = (apiProviders || []).filter(p => providerReadyForSelection(p) && (p.chat_models || []).length);
+            if(config.has_ms_key && config.ms_chat_models?.length && !list.some(p => p.id === 'modelscope')) list.push({id:'modelscope', name:'ModelScope', enabled:true, has_key:true, chat_models:config.ms_chat_models, image_models:[]});
             return list.length ? list : [{id:'comfly', name:'API', chat_models:[config.chat_model || 'gpt-4o-mini'], image_models:[config.image_model || 'gpt-image-2']}];
         }
         function imageProviders(){
-            const list = (apiProviders || []).filter(p => p.enabled !== false && (p.image_models || []).length);
+            const list = (apiProviders || []).filter(p => providerReadyForSelection(p) && (p.image_models || []).length);
             return list.length ? list : [{id:'comfly', name:'API', image_models:[config.image_model || 'gpt-image-2'], chat_models:[config.chat_model || 'gpt-4o-mini']}];
         }
         function providerById(id, kind='chat'){
@@ -2480,7 +2486,14 @@
             const input=document.getElementById('messageInput');
             if(!input) return;
             const suggestions={image:'请帮我生成一张：',write:'请帮我撰写或编辑：',research:'请帮我查找并整理：'};
-            if(kind==='image') setMode('image');
+            if(kind==='image'){
+                // 保持在可同时使用聊天/图像模型的智能助手模式，只打开图像模型页签。
+                // 用户可在同一个模型选择器中随时切回“对话”，不会被锁在生图模式。
+                setMode('agent');
+                setModelPickerScope('image');
+                // 等当前欢迎按钮的 click 事件冒泡结束后再打开，否则全局“点击外部关闭”会立即关掉弹层。
+                setTimeout(() => toggleModelPicker(true), 0);
+            }
             input.value=suggestions[kind]||'';
             autoGrow(input);
             input.focus();

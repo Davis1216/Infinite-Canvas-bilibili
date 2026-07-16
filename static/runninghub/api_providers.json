@@ -6,7 +6,7 @@
     "protocol": "runninghub",
     "image_generation_endpoint": "",
     "image_edit_endpoint": "",
-    "enabled": true,
+    "enabled": false,
     "primary": false,
     "image_models": [],
     "chat_models": [],

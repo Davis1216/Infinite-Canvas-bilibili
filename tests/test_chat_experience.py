@@ -32,6 +32,23 @@ class ChatExperienceTests(unittest.TestCase):
         self.assertTrue(os.path.exists(main.conversation_path(self.user_id, empty["id"])))
         self.assertEqual(main.list_conversations(self.user_id), [])
 
+    def test_optional_builtin_providers_are_disabled_by_default(self):
+        defaults = {item["id"]: item for item in main.default_api_providers()}
+        self.assertFalse(defaults["modelscope"]["enabled"])
+        self.assertFalse(defaults["runninghub"]["enabled"])
+
+    def test_image_welcome_action_keeps_agent_model_switching_available(self):
+        page_path = os.path.join(main.STATIC_DIR, "gpt-chat.html")
+        with open(page_path, "r", encoding="utf-8") as handle:
+            page = handle.read()
+        action = page.split("function useWelcomeSuggestion(kind){", 1)[1].split("function sendJinniStarter", 1)[0]
+        self.assertIn("setMode('agent')", action)
+        self.assertIn("setModelPickerScope('image')", action)
+        self.assertIn("setTimeout(() => toggleModelPicker(true), 0)", action)
+        self.assertNotIn("setMode('image')", action)
+        self.assertIn("config.has_ms_key", page)
+        self.assertIn("providerReadyForSelection", page)
+
     def test_first_queued_message_creates_exactly_one_history_record(self):
         async def no_background_run(*args, **kwargs):
             return None
