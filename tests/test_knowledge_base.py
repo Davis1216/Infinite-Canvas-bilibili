@@ -148,6 +148,12 @@ class KnowledgeBaseApiTests(unittest.TestCase):
         citations = result.json()["result"]["citations"]
         self.assertTrue(citations)
         self.assertEqual(citations[0]["title"], "Orion 发布规范")
+        self.assertEqual(citations[0]["knowledge_base_id"], knowledge_base["id"])
+        chunk_preview = self.client.get(
+            f"/api/knowledge-chunks/{citations[0]['chunk_id']}", headers=self.headers,
+        )
+        self.assertEqual(chunk_preview.status_code, 200, chunk_preview.text)
+        self.assertIn("cobalt approval code", chunk_preview.json()["chunk"]["text"])
         chinese = self.client.post(
             f"/api/knowledge-bases/{knowledge_base['id']}/search", headers=self.json_headers,
             json={"query": "发布", "limit": 5},
@@ -167,7 +173,29 @@ class KnowledgeBaseApiTests(unittest.TestCase):
 
         stranger = {"X-User-ID": f"stranger-{uuid.uuid4().hex}"}
         self.assertEqual(self.client.get(f"/api/knowledge-bases/{knowledge_base['id']}", headers=stranger).status_code, 404)
+        self.assertEqual(
+            self.client.get(f"/api/knowledge-chunks/{citations[0]['chunk_id']}", headers=stranger).status_code, 404
+        )
         self.assertEqual(self.client.get("/api/knowledge-bases", headers=stranger).json()["knowledge_bases"], [])
+
+    def test_retrieval_evidence_is_frozen_on_supported_assistant_message(self):
+        conversation = {
+            "messages": [
+                {"id": "u1", "role": "user", "content": "依据资料回答"},
+                {"id": "a1", "role": "assistant", "content": "答案 [1]"},
+            ],
+            "last_knowledge_retrieval": {
+                "query": "依据资料回答", "mode": "strict", "citations": [{
+                    "chunk_id": "chunk-1", "knowledge_base_id": "base-1",
+                    "document_id": "doc-1", "version_id": "version-1", "title": "资料",
+                }],
+            },
+        }
+        main._attach_pending_knowledge_citations(conversation)
+        assistant = conversation["messages"][-1]
+        self.assertEqual(assistant["knowledge_citations"][0]["chunk_id"], "chunk-1")
+        self.assertEqual(assistant["knowledge_mode"], "strict")
+        self.assertEqual(conversation["last_knowledge_retrieval"]["assistant_message_id"], "a1")
 
     def test_jinni_strict_binding_and_frozen_generation(self):
         knowledge_base = self.create_base("严格回答库")

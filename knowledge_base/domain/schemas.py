@@ -43,6 +43,7 @@ class MaintenanceCreate(BaseModel):
 
 class KnowledgeCitation(BaseModel):
     chunk_id: str
+    knowledge_base_id: str
     document_id: str
     version_id: str
     title: str

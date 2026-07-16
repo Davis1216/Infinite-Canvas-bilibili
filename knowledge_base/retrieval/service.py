@@ -82,7 +82,8 @@ class RetrievalService:
             location = f"第 {row['page']} 页" if row.get("page") else row.get("section") or "正文"
             context_parts.append(f"[{index}] {row['title']} · {location}\n{excerpt}")
             citations.append(KnowledgeCitation(
-                chunk_id=row["id"], document_id=row["document_id"], version_id=row["version_id"],
+                chunk_id=row["id"], knowledge_base_id=row["knowledge_base_id"],
+                document_id=row["document_id"], version_id=row["version_id"],
                 title=row["title"], section=row.get("section") or "", page=row.get("page"),
                 excerpt=excerpt[:500], score=float(fused_item["score"]), source=fused_item["source"],
             ))

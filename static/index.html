@@ -1528,6 +1528,10 @@
                         </svg>
                         <span class="side-pill-text" data-i18n="common.language">中文</span>
                     </button>
+                    <button class="side-pill" onclick="openDisplayNameModal()" id="display-name-btn" type="button" title="设置欢迎称呼">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>
+                        <span class="side-pill-text">称呼设置</span>
+                    </button>
                     <button class="side-pill" onclick="switchUI(this, 'comfyui-settings')" type="button" title="工作流设置">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="3" width="7" height="7" rx="1"></rect>
@@ -1567,10 +1571,10 @@
             <iframe id="frame-zimage" data-src="/static/zimage.html?v=2026.07.4.2.1784104431" class="active" scrolling="yes"></iframe>
             <iframe id="frame-enhance" data-src="/static/enhance.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
             <iframe id="frame-klein" data-src="/static/klein.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
-            <iframe id="frame-angle" data-src="/static/angle.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
+            <iframe id="frame-angle" data-src="/static/angle.html?v=2026.07.4.2.1784206391" scrolling="yes"></iframe>
             <iframe id="frame-online" data-src="/static/online.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
-            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.07.4.2.1784188772" scrolling="yes"></iframe>
-            <iframe id="frame-knowledge-base" data-src="/static/knowledge-base.html?v=2026.07.4.2.1784193888" scrolling="yes"></iframe>
+            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.07.4.2.1784205913" scrolling="yes"></iframe>
+            <iframe id="frame-knowledge-base" data-src="/static/knowledge-base.html?v=2026.07.4.2.1784200348" scrolling="yes"></iframe>
             <iframe id="frame-usage-dashboard" data-src="/static/usage-dashboard.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
             <iframe id="frame-inspiration-space" data-src="/static/inspiration-space.html?v=2026.07.4.2.1784037058" scrolling="yes"></iframe>
             <iframe id="frame-asset-manager" data-src="/static/asset-manager.html?v=2026.07.4.2.1784108526" scrolling="yes"></iframe>
@@ -1579,6 +1583,14 @@
             <iframe id="frame-canvas" data-src="/static/canvas-list.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
 
         </main>
+    </div>
+
+    <div id="display-name-modal" class="studio-modal" hidden role="dialog" aria-modal="true" aria-labelledby="display-name-title" onclick="if(event.target===this) closeDisplayNameModal()">
+        <div class="studio-modal-panel" style="width:min(480px,100%)">
+            <div class="studio-modal-head"><div><div class="studio-modal-kicker">个性化</div><h2 id="display-name-title" class="studio-modal-title">设置欢迎称呼</h2></div><button class="studio-modal-close" type="button" onclick="closeDisplayNameModal()" aria-label="关闭"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="m18 6-12 12M6 6l12 12"></path></svg></button></div>
+            <div class="studio-modal-body"><p class="studio-modal-copy">称呼仅保存在当前浏览器，用于头脑风暴欢迎页，不会上传到模型服务。</p><input id="display-name-input" maxlength="40" placeholder="例如：daivs" style="width:100%;height:44px;padding:0 13px;border:1px solid var(--line,#d9e0e8);border-radius:12px;background:var(--panel,#fff);color:inherit;outline:none"></div>
+            <div class="studio-modal-actions"><button class="studio-modal-btn" type="button" onclick="clearDisplayName()">清除称呼</button><button class="studio-modal-btn" type="button" onclick="closeDisplayNameModal()">取消</button><button class="studio-modal-btn primary" type="button" onclick="saveDisplayName()">保存</button></div>
+        </div>
     </div>
 
     <div id="project-update-modal" class="studio-modal" hidden role="dialog" aria-modal="true" aria-labelledby="project-update-title">
@@ -1832,6 +1844,10 @@
             syncThemeToFrame(target);
             syncLanguageToFrame(target);
             syncScaleToFrame(target);
+            if(id === 'gpt-chat') {
+                try { target.contentWindow?.postMessage({ type:'brainstorm-new-chat' }, '*'); } catch(e) {}
+                syncDisplayNameToFrame(target);
+            }
             if(LOCAL_PAGE_IDS.includes(id)) {
                 setLocalNavCollapsed(false, { skipRemember:true });
             } else {
@@ -1845,6 +1861,29 @@
                 try { target.contentWindow?.postMessage({ type: 'canvas-focus' }, '*'); } catch(e) {}
             }
             resetStudioRootScroll();
+        }
+
+        function syncDisplayNameToFrame(frame) {
+            try { frame?.contentWindow?.postMessage({type:'studio-display-name',value:localStorage.getItem('studio_display_name')||''},'*'); } catch(e) {}
+        }
+
+        function openDisplayNameModal(){
+            const modal=document.getElementById('display-name-modal');
+            const input=document.getElementById('display-name-input');
+            if(input) input.value=localStorage.getItem('studio_display_name')||'';
+            if(modal) modal.hidden=false;
+            requestAnimationFrame(()=>input?.focus());
+        }
+        function closeDisplayNameModal(){ const modal=document.getElementById('display-name-modal'); if(modal) modal.hidden=true; }
+        function saveDisplayName(){
+            const value=String(document.getElementById('display-name-input')?.value||'').trim().slice(0,40);
+            if(value) localStorage.setItem('studio_display_name',value); else localStorage.removeItem('studio_display_name');
+            document.querySelectorAll('iframe').forEach(syncDisplayNameToFrame); closeDisplayNameModal();
+        }
+        function clearDisplayName(){
+            localStorage.removeItem('studio_display_name');
+            const input=document.getElementById('display-name-input'); if(input) input.value='';
+            document.querySelectorAll('iframe').forEach(syncDisplayNameToFrame); closeDisplayNameModal();
         }
 
         function forwardStudioApiChange(data) {
@@ -2052,6 +2091,10 @@
                 syncThemeToFrame(f);
                 syncLanguageToFrame(f);
                 syncScaleToFrame(f);
+                syncDisplayNameToFrame(f);
+                if(f.id === 'frame-gpt-chat' && f.classList.contains('active')) {
+                    try { f.contentWindow?.postMessage({type:'brainstorm-new-chat'},'*'); } catch(e) {}
+                }
             });
         });
 
@@ -2436,7 +2479,7 @@
         });
 
         window.addEventListener('keydown', event => {
-            if(event.key === 'Escape') closeProjectUpdateModal();
+            if(event.key === 'Escape') { closeProjectUpdateModal(); closeDisplayNameModal(); }
         });
 
         async function runProjectUpdate() {

@@ -131,15 +131,63 @@
         .empty-state { margin:auto; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--chat-faint); text-align:center; }
         .empty-state i,.empty-state svg { width:54px; height:54px; stroke-width:1.2; }
         .empty-state-text { font-size:11px; line-height:1; font-weight:950; letter-spacing:.22em; text-transform:uppercase; }
+        .welcome-state { margin:auto; width:min(680px,100%); display:flex; flex-direction:column; align-items:flex-start; gap:20px; padding:28px; animation:messageIn .22s var(--ease); }
+        .welcome-state h2 { margin:0; color:var(--chat-text); font-size:clamp(24px,3vw,36px); line-height:1.22; letter-spacing:-.035em; }
+        .welcome-actions { display:flex; flex-wrap:wrap; gap:9px; }
+        .welcome-action { height:42px; padding:0 14px; display:flex; align-items:center; gap:9px; border:1px solid var(--chat-line); border-radius:13px; background:var(--chat-panel); color:var(--chat-muted); font-size:12px; font-weight:850; transition:transform .15s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease); }
+        .welcome-action:hover { transform:translateY(-2px); background:var(--chat-soft); border-color:var(--chat-line-2); color:var(--chat-text); }
+        .welcome-action i,.welcome-action svg { width:16px; height:16px; }
         .bubble-row { width:100%; display:flex; gap:10px; align-items:flex-end; justify-content:flex-start; }
         .bubble-row.user { justify-content:flex-end; }
+        .bubble-stack { max-width:min(860px,78%); display:flex; flex-direction:column; align-items:flex-start; gap:5px; }
+        .bubble-row.user .bubble-stack { align-items:flex-end; }
+        .bubble-stack .bubble { max-width:100%; }
         .bubble { max-width:min(860px,78%); overflow:visible; border-radius:18px; padding:14px 16px; font-size:14px; line-height:1.72; white-space:pre-wrap; word-break:break-word; box-shadow:0 1px 0 rgba(15,23,42,.03); }
         .bubble.user { background:var(--chat-user-bg); color:var(--chat-user-text); border-bottom-right-radius:6px; }
         .bubble.assistant { background:var(--chat-panel); color:var(--chat-text); border:1px solid var(--chat-line); border-bottom-left-radius:6px; }
+        .message-actions { min-height:30px; display:flex; align-items:center; gap:3px; opacity:0; transform:translateY(-3px); pointer-events:none; transition:opacity .14s var(--ease),transform .14s var(--ease); }
+        .bubble-row:hover .message-actions,.bubble-row:focus-within .message-actions,.message-actions.has-versions { opacity:1; transform:none; pointer-events:auto; }
+        .message-action { width:30px; height:30px; display:grid; place-items:center; border-radius:9px; color:var(--chat-muted); background:transparent; transition:background .14s var(--ease),color .14s var(--ease),transform .14s var(--ease); }
+        .message-action:hover { background:var(--chat-soft); color:var(--chat-text); transform:translateY(-1px); }
+        .message-action i,.message-action svg { width:15px; height:15px; }
+        .version-switcher { height:30px; display:flex; align-items:center; gap:4px; margin-left:3px; padding:0 5px; border:1px solid var(--chat-line); border-radius:9px; color:var(--chat-muted); font-size:10px; font-weight:900; }
+        .version-switcher button { width:22px; height:22px; display:grid; place-items:center; border-radius:6px; color:inherit; }
+        .version-switcher button:hover { background:var(--chat-soft); color:var(--chat-text); }
+        .version-switcher svg { width:13px; height:13px; }
+        .message-edit-box { width:min(620px,72vw); display:flex; flex-direction:column; gap:8px; }
+        .message-edit-box textarea { width:100%; min-height:90px; padding:10px 11px; resize:vertical; outline:none; border:1px solid rgba(255,255,255,.35); border-radius:10px; background:rgba(255,255,255,.12); color:inherit; font:inherit; line-height:1.6; }
+        .message-edit-actions { display:flex; justify-content:flex-end; gap:7px; }
+        .message-edit-actions button { height:30px; padding:0 10px; border-radius:9px; background:rgba(255,255,255,.16); color:inherit; font-size:10px; font-weight:900; }
+        .run-error-card { min-width:min(520px,72vw); border-color:rgba(220,38,38,.25) !important; background:color-mix(in srgb,var(--chat-panel) 92%,#ef4444 8%) !important; }
+        .run-error-title { display:flex; align-items:center; gap:8px; font-weight:950; color:#dc2626; }
+        .run-error-title svg { width:17px; height:17px; }
+        .run-error-summary { margin-top:7px; color:var(--chat-text); }
+        .run-error-meta { margin-top:9px; color:var(--chat-muted); font-size:10px; font-weight:800; }
+        .run-error-details { margin-top:9px; padding:10px; border:1px solid var(--chat-line); border-radius:10px; background:var(--chat-bg); color:var(--chat-muted); font-size:10px; line-height:1.65; white-space:normal; }
+        .run-error-actions { margin-top:10px; display:flex; gap:7px; }
+        .run-error-actions button { height:32px; padding:0 11px; display:flex; align-items:center; gap:6px; border:1px solid var(--chat-line); border-radius:9px; color:var(--chat-text); background:var(--chat-panel); font-size:10px; font-weight:900; }
+        .run-error-actions svg { width:14px; height:14px; }
+        .knowledge-citation-link { display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:22px; margin:0 2px; padding:0 6px; border:1px solid var(--chat-line-2); border-radius:7px; background:var(--chat-soft); color:var(--chat-text); font:inherit; font-size:11px; font-weight:950; line-height:1; vertical-align:.08em; cursor:pointer; transition:transform .15s var(--ease),background .15s var(--ease),border-color .15s var(--ease); }
+        .knowledge-citation-link:hover { transform:translateY(-1px); border-color:var(--chat-strong); background:var(--chat-panel-2); }
+        .knowledge-citation-modal { position:fixed; inset:0; z-index:10018; display:flex; align-items:center; justify-content:center; padding:22px; background:rgba(15,23,42,.58); backdrop-filter:blur(12px); }
+        .knowledge-citation-modal[hidden] { display:none; }
+        .knowledge-citation-dialog { width:min(760px,100%); max-height:min(760px,88vh); overflow:hidden; display:flex; flex-direction:column; border:1px solid var(--chat-line-2); border-radius:18px; background:var(--chat-panel); box-shadow:0 30px 80px rgba(15,23,42,.3); }
+        .knowledge-citation-head { padding:15px 17px; display:flex; align-items:flex-start; justify-content:space-between; gap:14px; border-bottom:1px solid var(--chat-line); }
+        .knowledge-citation-heading { min-width:0; }
+        .knowledge-citation-kicker { color:var(--chat-muted); font-size:9px; font-weight:950; letter-spacing:.12em; text-transform:uppercase; }
+        .knowledge-citation-title { margin:4px 0 0; color:var(--chat-text); font-size:15px; font-weight:950; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .knowledge-citation-body { min-height:180px; overflow:auto; padding:17px; }
+        .knowledge-citation-meta { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:13px; }
+        .knowledge-citation-meta span { padding:5px 8px; border:1px solid var(--chat-line); border-radius:8px; background:var(--chat-soft); color:var(--chat-muted); font-size:9px; font-weight:850; }
+        .knowledge-citation-content { margin:0; padding:15px; border:1px solid var(--chat-line); border-radius:12px; background:var(--chat-bg); color:var(--chat-text); font:inherit; font-size:12px; line-height:1.75; white-space:pre-wrap; overflow-wrap:anywhere; }
+        .knowledge-citation-loading,.knowledge-citation-error { min-height:160px; display:flex; align-items:center; justify-content:center; color:var(--chat-muted); font-size:11px; text-align:center; }
+        .knowledge-citation-error { color:#dc2626; }
         .bubble.image-bubble { width:max-content; max-width:min(600px,78%); padding:10px; }
         .bubble.image-bubble .bubble-text { max-width:min(560px,100%); margin:0 2px 8px; color:var(--chat-muted); font-size:12px; line-height:1.55; white-space:pre-wrap; }
         .bubble.image-bubble .bubble-text:empty { display:none; }
         .bubble.assistant.streaming::after { content:""; display:inline-block; width:7px; height:1.2em; margin-left:3px; border-radius:999px; background:var(--chat-text); vertical-align:-.2em; animation:cursorBlink .9s steps(2,end) infinite; }
+        @keyframes messageIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+        .bubble-row { animation:messageIn .2s var(--ease); }
         .generated-grid { display:grid; gap:8px; }
         .generated-grid.count-2,
         .generated-grid.count-3,
@@ -452,9 +500,14 @@
             .composer-inside-foot { align-items:end; }
             .ref-strip { max-width:100%; }
             .bubble { max-width:90%; }
+            .bubble-stack { max-width:90%; }
+            .message-actions { opacity:1; transform:none; pointer-events:auto; }
             .bubble.image-bubble { max-width:90%; }
             .bubble img.generated { max-width:100%; max-height:34vh; }
             .action-btn span { display:none; }
+        }
+        @media (prefers-reduced-motion:reduce){
+            *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
         }
         .messages,
         .composer-body,
@@ -704,6 +757,8 @@
             .knowledge-picker-list,.knowledge-picker-modes { grid-template-columns:1fr; }
             .knowledge-picker-modal { padding:10px; align-items:flex-end; }
             .knowledge-picker-dialog { max-height:88vh; border-radius:17px 17px 10px 10px; }
+            .knowledge-citation-modal { padding:10px; align-items:flex-end; }
+            .knowledge-citation-dialog { max-height:88vh; border-radius:17px 17px 10px 10px; }
             .jinni-starter-chips { grid-template-columns:1fr; }
             .jinni-editor-head { align-items:flex-start; flex-direction:column; }
         }
@@ -889,6 +944,15 @@
             <div class="knowledge-picker-foot"><button type="button" class="knowledge-picker-btn" onclick="clearOrdinaryKnowledge()">清除知识库</button><div><button type="button" class="knowledge-picker-btn" onclick="closeOrdinaryKnowledgePicker()">取消</button><button type="button" class="knowledge-picker-btn primary" onclick="saveOrdinaryKnowledge()">应用到当前聊天</button></div></div>
         </section>
     </div>
+    <div id="knowledgeCitationModal" class="knowledge-citation-modal" hidden onclick="if(event.target===this) closeKnowledgeCitation()">
+        <section class="knowledge-citation-dialog" role="dialog" aria-modal="true" aria-labelledby="knowledgeCitationTitle" onclick="event.stopPropagation()">
+            <div class="knowledge-citation-head">
+                <div class="knowledge-citation-heading"><div id="knowledgeCitationKicker" class="knowledge-citation-kicker">知识库索引片段</div><h2 id="knowledgeCitationTitle" class="knowledge-citation-title">加载引用…</h2></div>
+                <button type="button" class="jinni-row-remove" onclick="closeKnowledgeCitation()" aria-label="关闭引用预览"><i data-lucide="x"></i></button>
+            </div>
+            <div id="knowledgeCitationBody" class="knowledge-citation-body"><div class="knowledge-citation-loading">正在读取真实索引片段…</div></div>
+        </section>
+    </div>
 
     <script>
         lucide.createIcons();
@@ -929,6 +993,11 @@
         }
         window.addEventListener('message', event => {
             if(event.data?.type === 'studio-lang') applyLanguage(event.data.lang);
+            if(event.data?.type === 'brainstorm-new-chat') newConversation({fromNavigation:true});
+            if(event.data?.type === 'studio-display-name') {
+                displayName = String(event.data.value || '').trim().slice(0,40);
+                if(!currentConversation && !pendingJinni) renderMessages([]);
+            }
         });
         window.addEventListener('studio-lang-change', () => {
             document.title = tr('chat.title');
@@ -1002,6 +1071,10 @@
         let editingKnowledgeFiles = [];
         let jinniSearchTimer = null;
         let conversationTransitioning = false;
+        let pendingJinni = null;
+        let displayName = String(localStorage.getItem('studio_display_name') || '').trim().slice(0,40);
+        let openThreadMenuId = '';
+        let lastThreadRunSignature = '';
 
         const SIZE_OPTIONS = {
             square: [['1024x1024','1k'], ['1536x1536','2k'], ['2048x2048','4k']],
@@ -1016,7 +1089,7 @@
         const headers = () => ({'Content-Type':'application/json', 'X-User-ID':userId});
 
         function currentJinniSnapshot(){
-            return isObject(currentConversation?.jinni_snapshot) ? currentConversation.jinni_snapshot : null;
+            return isObject(currentConversation?.jinni_snapshot) ? currentConversation.jinni_snapshot : (isObject(pendingJinni) ? pendingJinni : null);
         }
 
         function jinniAvatarMarkup(jinni, className='jinni-avatar'){
@@ -1150,19 +1223,20 @@
         function normalizedJinniKnowledgeConfig(item={}){
             if(isObject(item.knowledge_config)){
                 const config = item.knowledge_config;
+                const requestedDefault=['augment','strict'].includes(config.default_mode) ? config.default_mode : 'none';
                 return {
-                    default_mode:['none','augment','strict','maintain'].includes(config.default_mode) ? config.default_mode : 'none',
+                    default_mode:requestedDefault,
                     augment:{enabled:!!config.augment?.enabled,knowledge_base_ids:[...(config.augment?.knowledge_base_ids||[])]},
                     strict:{enabled:!!config.strict?.enabled,knowledge_base_id:config.strict?.knowledge_base_id||''},
-                    maintain:{enabled:!!config.maintain?.enabled,knowledge_base_ids:[...(config.maintain?.knowledge_base_ids||[])]},
+                    maintain:{enabled:false,knowledge_base_ids:[]},
                 };
             }
             const ids=[...(item.knowledge_base_ids||[])];
             return {
-                default_mode:item.default_knowledge_mode||'none',
+                default_mode:['augment','strict'].includes(item.default_knowledge_mode) ? item.default_knowledge_mode : 'none',
                 augment:{enabled:!!item.knowledge_capabilities?.augment,knowledge_base_ids:ids},
                 strict:{enabled:!!item.knowledge_capabilities?.strict,knowledge_base_id:item.strict_knowledge_base_id||''},
-                maintain:{enabled:!!item.knowledge_capabilities?.maintain,knowledge_base_ids:ids},
+                maintain:{enabled:false,knowledge_base_ids:[]},
             };
         }
 
@@ -1172,16 +1246,19 @@
             return knowledgeBases.map(item=>`<label class="jinni-kb-option"><input type="${radio?'radio':'checkbox'}" name="${name}" value="${escapeHtml(item.id)}" ${values.includes(item.id)?'checked':''}><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span></label>`).join('');
         }
 
-        function refreshJinniDefaultKnowledgeModes(changedMode=''){
+        function refreshJinniDefaultKnowledgeModes(preferredMode=''){
             const select=document.getElementById('jinniDefaultKnowledgeMode');
             if(!select) return;
-            const current=select.value||'none';
-            const enabled={augment:!!document.getElementById('jinniKbAugment')?.checked,strict:!!document.getElementById('jinniKbStrict')?.checked,maintain:!!document.getElementById('jinniKbMaintain')?.checked};
-            const labels={augment:'结合知识库回答',strict:'仅知识库回答',maintain:'知识维护'};
-            select.innerHTML=`<option value="none">普通对话（默认不检索知识库）</option>`+Object.keys(labels).filter(mode=>enabled[mode]).map(mode=>`<option value="${mode}">${labels[mode]}</option>`).join('');
-            select.value=enabled[current]||current==='none'?current:'none';
+            const current=preferredMode||select.value||'none';
+            const enabled={augment:!!document.getElementById('jinniKbAugment')?.checked,strict:!!document.getElementById('jinniKbStrict')?.checked};
+            const labels={augment:'结合知识库回答',strict:'仅知识库回答'};
+            const modes=Object.keys(labels).filter(mode=>enabled[mode]);
+            select.innerHTML=(modes.length?modes:['none']).map(mode=>`<option value="${mode}">${labels[mode]||'不使用知识库'}</option>`).join('');
+            select.value=modes.includes(current)?current:(modes[0]||'none');
+            const container=document.getElementById('jinniKnowledgeDefault');
+            if(container) container.hidden=modes.length<2;
             const hint=document.getElementById('jinniKnowledgeHint');
-            if(changedMode && !enabled[changedMode] && current===changedMode && hint) hint.textContent='已关闭默认能力，打开 Jinni 时将回到普通对话。';
+            if(hint) hint.textContent='两种方式都启用时，选择打开 Jinni 后首先使用哪一种。';
         }
 
         function toggleJinniKnowledgeCapability(mode){
@@ -1235,19 +1312,16 @@
                     <div class="jinni-field"><label for="jinniImageModel">默认图像模型</label><select id="jinniImageModel">${jinniModelOptions('image',editingJinni.image_provider_id,editingJinni.image_model)}</select></div>
                     <div class="jinni-field wide"><span class="jinni-section-label">能力</span><div class="jinni-capabilities"><label class="jinni-capability"><input type="checkbox" checked disabled><span>聊天</span></label><label class="jinni-capability"><input id="jinniCanGenerate" type="checkbox" ${editingJinni.capabilities?.generate_image ? 'checked' : ''}><span>生成图片</span></label><label class="jinni-capability"><input id="jinniCanEdit" type="checkbox" ${editingJinni.capabilities?.edit_image ? 'checked' : ''}><span>编辑图片</span></label></div></div>
                     <section class="jinni-knowledge-section">
-                        <div class="jinni-knowledge-intro"><strong>知识库使用方式</strong><span>三种能力彼此独立。只为需要的能力选择资料范围，聊天页不能扩大这里授权的知识库。</span></div>
+                        <div class="jinni-knowledge-intro"><strong>知识库使用方式</strong><span>选择 Jinni 如何使用资料。启用一种方式时会自动作为默认；两种都启用时可指定默认方式。</span></div>
                         <article class="jinni-knowledge-card ${knowledgeConfig.augment.enabled?'enabled':''}"><label class="jinni-knowledge-card-head"><input id="jinniKbAugment" type="checkbox" ${knowledgeConfig.augment.enabled?'checked':''} onchange="toggleJinniKnowledgeCapability('augment')"><span class="jinni-knowledge-card-copy"><strong>结合知识库回答</strong><span>引用所选资料，也允许结合模型通用知识；知识库事实会带引用。</span></span></label><div id="jinniKbAugmentBody" class="jinni-knowledge-card-body" ${knowledgeConfig.augment.enabled?'':'hidden'}><label>可引用的知识库（可多选）</label><div class="jinni-kb-list">${renderJinniKnowledgeChoices('jinniKbAugmentBase',knowledgeConfig.augment.knowledge_base_ids)}</div></div></article>
                         <article class="jinni-knowledge-card ${knowledgeConfig.strict.enabled?'enabled':''}"><label class="jinni-knowledge-card-head"><input id="jinniKbStrict" type="checkbox" ${knowledgeConfig.strict.enabled?'checked':''} onchange="toggleJinniKnowledgeCapability('strict')"><span class="jinni-knowledge-card-copy"><strong>仅知识库回答</strong><span>只能依据一个指定知识库回答；没有可靠证据时明确拒答。</span></span></label><div id="jinniKbStrictBody" class="jinni-knowledge-card-body" ${knowledgeConfig.strict.enabled?'':'hidden'}><label>严格回答知识库（单选）</label><div class="jinni-kb-list">${renderJinniKnowledgeChoices('jinniKbStrictBase',knowledgeConfig.strict.knowledge_base_id,true)}</div></div></article>
-                        <article class="jinni-knowledge-card ${knowledgeConfig.maintain.enabled?'enabled':''}"><label class="jinni-knowledge-card-head"><input id="jinniKbMaintain" type="checkbox" ${knowledgeConfig.maintain.enabled?'checked':''} onchange="toggleJinniKnowledgeCapability('maintain')"><span class="jinni-knowledge-card-copy"><strong>知识维护</strong><span>分析重复、冲突和过期风险，只生成可审批建议，不会直接修改资料。</span></span></label><div id="jinniKbMaintainBody" class="jinni-knowledge-card-body" ${knowledgeConfig.maintain.enabled?'':'hidden'}><label>需要维护的知识库（可多选）</label><div class="jinni-kb-list">${renderJinniKnowledgeChoices('jinniKbMaintainBase',knowledgeConfig.maintain.knowledge_base_ids)}</div></div></article>
-                        <div class="jinni-knowledge-default"><label for="jinniDefaultKnowledgeMode">打开这个 Jinni 时默认使用</label><select id="jinniDefaultKnowledgeMode"></select><small id="jinniKnowledgeHint">会话中只能切换到上面已启用的能力。</small></div>
+                        <div id="jinniKnowledgeDefault" class="jinni-knowledge-default"><label for="jinniDefaultKnowledgeMode">进入 Jinni 后默认使用</label><select id="jinniDefaultKnowledgeMode"></select><small id="jinniKnowledgeHint"></small></div>
                         <details class="jinni-legacy-knowledge"><summary>兼容知识文件（旧版 Jinni）</summary><div class="jinni-legacy-body"><div id="jinniKnowledgeList" class="jinni-knowledge-list">${renderEditingKnowledge()}</div><input id="jinniKnowledgeInput" type="file" multiple hidden accept=".pdf,.txt,.md,.markdown,.json,.csv,.log,.py,.js,.ts,.tsx,.jsx,.html,.css,.xml,.yaml,.yml,.docx,.xlsx" onchange="uploadJinniKnowledge(this.files);this.value='' "><button type="button" class="jinni-add-row" onclick="document.getElementById('jinniKnowledgeInput').click()"><i data-lucide="paperclip"></i><span>添加兼容知识文件</span></button><small>新知识建议统一放入独立知识库；此处仅为历史 Jinni 保留。</small></div></details>
                     </section>
                     <div id="jinniFormError" class="jinni-form-error"></div>
                 </form>
             </div>`;
-            refreshJinniDefaultKnowledgeModes();
-            const defaultSelect=document.getElementById('jinniDefaultKnowledgeMode');
-            if(defaultSelect) defaultSelect.value=knowledgeConfig.default_mode;
+            refreshJinniDefaultKnowledgeModes(knowledgeConfig.default_mode);
             lucide.createIcons();
         }
 
@@ -1256,13 +1330,16 @@
         }
 
         function collectJinniDraft(){
+            const augmentEnabled=!!document.getElementById('jinniKbAugment')?.checked;
+            const strictEnabled=!!document.getElementById('jinniKbStrict')?.checked;
+            const enabledModes=[augmentEnabled?'augment':'',strictEnabled?'strict':''].filter(Boolean);
             const knowledgeConfig={
-                default_mode:document.getElementById('jinniDefaultKnowledgeMode')?.value||'none',
-                augment:{enabled:!!document.getElementById('jinniKbAugment')?.checked,knowledge_base_ids:[...document.querySelectorAll('input[name="jinniKbAugmentBase"]:checked')].map(input=>input.value)},
-                strict:{enabled:!!document.getElementById('jinniKbStrict')?.checked,knowledge_base_id:document.querySelector('input[name="jinniKbStrictBase"]:checked')?.value||''},
-                maintain:{enabled:!!document.getElementById('jinniKbMaintain')?.checked,knowledge_base_ids:[...document.querySelectorAll('input[name="jinniKbMaintainBase"]:checked')].map(input=>input.value)},
+                default_mode:enabledModes.includes(document.getElementById('jinniDefaultKnowledgeMode')?.value)?document.getElementById('jinniDefaultKnowledgeMode').value:(enabledModes[0]||'none'),
+                augment:{enabled:augmentEnabled,knowledge_base_ids:[...document.querySelectorAll('input[name="jinniKbAugmentBase"]:checked')].map(input=>input.value)},
+                strict:{enabled:strictEnabled,knowledge_base_id:document.querySelector('input[name="jinniKbStrictBase"]:checked')?.value||''},
+                maintain:{enabled:false,knowledge_base_ids:[]},
             };
-            const unionIds=[...new Set([...knowledgeConfig.augment.knowledge_base_ids,knowledgeConfig.strict.knowledge_base_id,...knowledgeConfig.maintain.knowledge_base_ids].filter(Boolean))];
+            const unionIds=[...new Set([...knowledgeConfig.augment.knowledge_base_ids,knowledgeConfig.strict.knowledge_base_id].filter(Boolean))];
             return {
                 name:document.getElementById('jinniName')?.value.trim() || '',
                 avatar_url:editingJinni?.avatar_url || '',
@@ -1276,7 +1353,7 @@
                 capabilities:{chat:true,generate_image:!!document.getElementById('jinniCanGenerate')?.checked,edit_image:!!document.getElementById('jinniCanEdit')?.checked},
                 knowledge_files:editingKnowledgeFiles,
                 knowledge_config:knowledgeConfig,
-                knowledge_capabilities:{augment:knowledgeConfig.augment.enabled,strict:knowledgeConfig.strict.enabled,maintain:knowledgeConfig.maintain.enabled},
+                knowledge_capabilities:{augment:knowledgeConfig.augment.enabled,strict:knowledgeConfig.strict.enabled,maintain:false},
                 knowledge_base_ids:unionIds,
                 strict_knowledge_base_id:knowledgeConfig.strict.knowledge_base_id,
                 default_knowledge_mode:knowledgeConfig.default_mode,
@@ -1293,7 +1370,6 @@
             if(!draft.name || !draft.instructions){ setJinniFormError('请填写 Jinni 名称和指令。'); return; }
             if(draft.knowledge_config.augment.enabled && !draft.knowledge_config.augment.knowledge_base_ids.length){ setJinniFormError('启用结合知识库回答时，请至少选择一个知识库。'); return; }
             if(draft.knowledge_config.strict.enabled && !draft.knowledge_config.strict.knowledge_base_id){ setJinniFormError('启用仅知识库回答时，请选择一个知识库。'); return; }
-            if(draft.knowledge_config.maintain.enabled && !draft.knowledge_config.maintain.knowledge_base_ids.length){ setJinniFormError('启用知识维护时，请至少选择一个知识库。'); return; }
             setJinniFormError('');
             try {
                 const id = editingJinni?.id;
@@ -1409,27 +1485,20 @@
             if(conversationTransitioning) return;
             conversationTransitioning = true;
             try {
-                const currentSnapshot = currentJinniSnapshot();
-                if(isPristineConversation() && currentSnapshot?.id === id){
-                    applyConversationRuntimeSettings();
-                    showChatWorkspace();
-                    setChatTitle(currentConversation.title || currentSnapshot.name);
-                    renderMessages([]);
-                    if(window.innerWidth <= 900) toggleConversationSidebar(false);
-                    return;
-                }
-                if(isPristineConversation()) await discardPristineConversation();
-                const response = await fetch(`/api/jinnis/${id}/conversations`,{method:'POST',headers:{'X-User-ID':userId}});
-                const data = await response.json();
-                if(!response.ok) throw new Error(data.detail || '无法发起 Jinni 聊天');
-                currentConversation = data.conversation;
-                rememberConversation(currentConversation.id);
-                applyConversationRuntimeSettings();
+                const selected = jinnis.find(item => item.id === id);
+                if(!selected) throw new Error('Jinni 不存在或尚未加载');
+                currentConversation = null;
+                pendingJinni = JSON.parse(JSON.stringify(selected));
+                ordinaryKnowledgeDraft={mode:'none',knowledge_base_ids:[]};
+                provider = selected.provider_id || provider;
+                activeChatModel = selected.chat_model || activeChatModel;
                 showChatWorkspace();
-                setChatTitle(currentConversation.title);
+                rememberConversation('');
+                setChatTitle(selected.name || 'Jinni');
                 lastRenderedRunSignature = '';
                 renderMessages([]);
-                await Promise.all([loadConversations(),loadJinnis()]);
+                updateKnowledgeModeControl();
+                renderThreads();
                 if(window.innerWidth <= 900) toggleConversationSidebar(false);
             } catch(e) { alert(e.message || '无法发起 Jinni 聊天'); }
             finally { conversationTransitioning = false; }
@@ -1457,7 +1526,7 @@
             if(!select || !ordinaryButton) return;
             const snapshot = currentJinniSnapshot();
             const config = snapshot ? normalizedJinniKnowledgeConfig(snapshot) : null;
-            const options = [['none','普通对话'],['augment','结合知识'],['strict','仅知识库'],['maintain','知识维护']].filter(([value]) => value === 'none' || config?.[value]?.enabled);
+            const options = [['none','不使用知识库'],['augment','结合知识'],['strict','仅知识库']].filter(([value]) => value === 'none' || config?.[value]?.enabled);
             select.innerHTML = options.map(([value,label]) => `<option value="${value}" ${value===(currentConversation?.knowledge_mode||snapshot?.default_knowledge_mode||'none')?'selected':''}>${label}</option>`).join('');
             select.classList.toggle('visible', !!snapshot && options.length > 1);
             ordinaryButton.classList.toggle('visible',!snapshot);
@@ -1938,6 +2007,7 @@
         function renderThreads(){
             const list = document.getElementById('threadList');
             if(!list) return;
+            const preservedMenuId = openThreadMenuId || list.querySelector('.thread-menu-popover.open')?.closest('.thread-row')?.dataset.conversationId || '';
             list.innerHTML = '';
             const items = visibleConversations();
             if(!items.length){
@@ -1961,6 +2031,7 @@
                     const status = run?.status || item.run_status || '';
                     const row = document.createElement('div');
                     row.className = 'thread-row';
+                    row.dataset.conversationId = item.id;
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = `thread-item ${currentConversation?.id === item.id ? 'active' : ''}`;
@@ -1985,6 +2056,11 @@
                 });
                 list.appendChild(section);
             });
+            if(preservedMenuId){
+                const row=[...list.querySelectorAll('.thread-row')].find(item=>item.dataset.conversationId===preservedMenuId);
+                row?.querySelector('.thread-menu-popover')?.classList.add('open');
+                row?.querySelector('.thread-menu-button')?.classList.add('active');
+            }
             lucide.createIcons();
         }
 
@@ -1994,6 +2070,24 @@
             const button = row.querySelector('.thread-menu-button');
             menu?.classList.toggle('open');
             button?.classList.toggle('active', menu?.classList.contains('open'));
+            openThreadMenuId = menu?.classList.contains('open') ? (row.dataset.conversationId || '') : '';
+        }
+
+        function updateThreadRunStatuses(){
+            document.querySelectorAll('.thread-row[data-conversation-id]').forEach(row=>{
+                const id=row.dataset.conversationId;
+                const run=latestRunForConversation(id);
+                const item=conversations.find(value=>value.id===id);
+                const status=run?.status||item?.run_status||'';
+                const line=row.querySelector('.thread-title-line');
+                let dot=line?.querySelector('.thread-status-dot');
+                if(status&&runStatusClass(status)){
+                    if(!dot){ dot=document.createElement('span'); line?.prepend(dot); }
+                    dot.className=`thread-status-dot ${runStatusClass(status)}`;
+                }else dot?.remove();
+                const preview=row.querySelector('.thread-preview');
+                if(preview&&status) preview.textContent=runStatusLabel(status)||item?.last_message||'';
+            });
         }
 
         function handleConversationSearch(value){
@@ -2007,11 +2101,6 @@
             const data = await fetch(`/api/conversations?q=${encodeURIComponent(conversationSearch)}`, {headers:{'X-User-ID':userId}}).then(r=>r.json());
             conversations = data.conversations || [];
             renderThreads();
-            if(!currentConversation) {
-                const rememberedId = rememberedConversation();
-                const target = (rememberedId && conversations.find(item => item.id === rememberedId)) || conversations[0];
-                if(target) await openConversation(target.id);
-            }
             if(!currentConversation) renderMessages([]);
         }
 
@@ -2036,7 +2125,7 @@
                 const previous = new Map(runStates);
                 runStates.clear();
                 (data.runs || []).forEach(run => runStates.set(run.id, run));
-                renderThreads();
+                updateThreadRunStatuses();
                 const currentRun = currentConversation ? latestRunForConversation(currentConversation.id) : null;
                 const oldRun = currentRun ? previous.get(currentRun.id) : null;
                 if(currentRun && (!oldRun || oldRun.status !== currentRun.status || oldRun.partial_content !== currentRun.partial_content)) {
@@ -2050,13 +2139,14 @@
         function renderCurrentRunState(){
             if(!currentConversation) return;
             const run = latestRunForConversation(currentConversation.id);
-            const signature = `${run?.id || ''}:${run?.status || ''}:${run?.partial_content || ''}:${currentConversation.messages?.length || 0}`;
+            const signature = `${run?.id || ''}:${run?.status || ''}:${run?.attempt || 0}:${run?.partial_content || ''}:${run?.error || ''}:${currentConversation.messages?.length || 0}`;
             if(signature === lastRenderedRunSignature) return;
             lastRenderedRunSignature = signature;
             const messages = [...(currentConversation.messages || [])];
             if(run && ['queued','running','failed','cancelled','interrupted'].includes(run.status)) {
-                const content = run.partial_content || run.error || runStatusLabel(run.status);
-                if(content) messages.push({role:'assistant', content, run_status:run.status});
+                const retrying=run.status==='running'&&Number(run.next_retry_at||0)>Date.now();
+                const content = run.partial_content || (retrying?`正在重试 ${run.attempt+1}/${run.max_attempts||3}…`:(run.error || runStatusLabel(run.status)));
+                if(content) messages.push({role:'assistant', content, run_status:run.status, run_id:run.id, error_info:run.error_info, attempt:run.attempt, max_attempts:run.max_attempts, provider_id:run.provider_id, model:run.model, finished_at:run.finished_at});
             }
             renderMessages(messages);
             updateComposerState();
@@ -2072,42 +2162,27 @@
             await loadConversations();
         }
 
-        async function newConversation(){
+        async function newConversation(options={}){
             if(conversationTransitioning) return;
             conversationTransitioning = true;
             try {
-                const reuseCurrent = isPristineConversation() && !currentJinniSnapshot();
-                if(isPristineConversation() && currentJinniSnapshot()) await discardPristineConversation();
+                if(currentConversation?.id) conversationScrollPositions.set(currentConversation.id, document.getElementById('messages')?.scrollTop || 0);
+                currentConversation = null;
+                pendingJinni = null;
                 restoreGlobalChatSettings();
                 ordinaryKnowledgeDraft={mode:'none',knowledge_base_ids:[]};
                 showChatWorkspace();
+                rememberConversation('');
                 conversationSearch = '';
                 const searchInput = document.getElementById('conversationSearch');
                 if(searchInput) searchInput.value = '';
-                if(reuseCurrent){
-                    if(currentConversation?.knowledge_context?.mode && currentConversation.knowledge_context.mode!=='none'){
-                        const response=await fetch(`/api/conversations/${currentConversation.id}`,{method:'PATCH',headers:headers(),body:JSON.stringify({knowledge_context:{mode:'none',knowledge_base_ids:[]}})});
-                        const data=await response.json();
-                        if(response.ok) currentConversation=data.conversation;
-                    }
-                    setChatTitle(currentConversation.title || '新对话');
-                    lastRenderedRunSignature = '';
-                    renderMessages([]);
-                    renderThreads();
-                    if(window.innerWidth <= 900) toggleConversationSidebar(false);
-                    return;
-                }
-                const response = await fetch('/api/conversations', {method:'POST', headers:headers(), body:JSON.stringify({title:'新对话'})});
-                const data = await response.json();
-                if(!response.ok) throw new Error(data.detail || '无法发起新聊天');
-                currentConversation = data.conversation;
                 setMode(mode,false);
                 updateWorkspaceChrome();
-                rememberConversation(currentConversation.id);
-                setChatTitle(currentConversation.title);
+                setChatTitle('');
                 lastRenderedRunSignature = '';
                 renderMessages([]);
-                await loadConversations();
+                renderThreads();
+                updateKnowledgeModeControl();
                 if(window.innerWidth <= 900) toggleConversationSidebar(false);
             } catch(e) { alert(e.message || '无法发起新聊天'); }
             finally { conversationTransitioning = false; }
@@ -2117,6 +2192,7 @@
             if(currentConversation?.id) conversationScrollPositions.set(currentConversation.id, document.getElementById('messages')?.scrollTop || 0);
             const data = await fetch(`/api/conversations/${id}`, {headers:{'X-User-ID':userId}}).then(r=>r.json());
             currentConversation = data.conversation;
+            pendingJinni = null;
             ordinaryKnowledgeDraft={mode:'none',knowledge_base_ids:[]};
             if(currentJinniSnapshot()) applyConversationRuntimeSettings();
             else restoreGlobalChatSettings();
@@ -2180,7 +2256,11 @@
             const resolutionPopover = document.getElementById('resolutionPickerPopover');
             if(resolutionPicker?.classList.contains('open') && !resolutionPicker.contains(event.target) && !resolutionPopover?.contains(event.target)) toggleResolutionPicker(false);
             const menu = event.target.closest?.('.thread-menu-popover,.thread-menu-button');
-            if(!menu) document.querySelectorAll('.thread-menu-popover.open').forEach(item => item.classList.remove('open'));
+            if(!menu){
+                document.querySelectorAll('.thread-menu-popover.open').forEach(item => item.classList.remove('open'));
+                document.querySelectorAll('.thread-menu-button.active').forEach(item => item.classList.remove('active'));
+                openThreadMenuId='';
+            }
         });
 
         function setMode(next, persist = true){
@@ -2386,13 +2466,24 @@
                     const starters = (jinni.starters || []).map(value => `<button type="button" class="jinni-starter-chip" onclick="sendJinniStarter(decodeURIComponent('${encodeURIComponent(value)}'))">${escapeHtml(value)}</button>`).join('');
                     box.innerHTML = `<div class="jinni-chat-empty">${jinniAvatarMarkup(jinni)}<h2>${escapeHtml(jinni.name || 'Jinni')}</h2><p>${escapeHtml(jinni.description || '告诉我你想完成什么，我会按照保存的 Jinni 指令协助你。')}</p>${starters ? `<div class="jinni-starter-chips">${starters}</div>` : ''}</div>`;
                 } else {
-                    box.innerHTML = `<div class="empty-state"><i data-lucide="messages-square"></i><div class="empty-state-text">${tr('chat.ready')}</div></div>`;
+                    const greeting = displayName ? `你好，${escapeHtml(displayName)}。准备好开始了吗？` : '你好，准备好开始了吗？';
+                    box.innerHTML = `<div class="welcome-state"><h2>${greeting}</h2><div class="welcome-actions"><button type="button" class="welcome-action" onclick="useWelcomeSuggestion('image')"><i data-lucide="image"></i><span>生成图片</span></button><button type="button" class="welcome-action" onclick="useWelcomeSuggestion('write')"><i data-lucide="pen-line"></i><span>撰写或编辑</span></button><button type="button" class="welcome-action" onclick="useWelcomeSuggestion('research')"><i data-lucide="search"></i><span>查找资料</span></button></div></div>`;
                 }
                 lucide.createIcons();
                 return;
             }
-            messages.forEach(addMessageBubble);
+            messages.forEach((message,index)=>addMessageBubble(message,index,messages));
             scrollBottom();
+        }
+
+        function useWelcomeSuggestion(kind){
+            const input=document.getElementById('messageInput');
+            if(!input) return;
+            const suggestions={image:'请帮我生成一张：',write:'请帮我撰写或编辑：',research:'请帮我查找并整理：'};
+            if(kind==='image') setMode('image');
+            input.value=suggestions[kind]||'';
+            autoGrow(input);
+            input.focus();
         }
 
         function sendJinniStarter(value){
@@ -2403,10 +2494,73 @@
             sendMessage();
         }
 
-        function addMessageBubble(msg){
+        function renderKnowledgeCitationText(node, content, citations){
+            const text=String(content||'');
+            const evidence=Array.isArray(citations)?citations:[];
+            node.replaceChildren();
+            if(!evidence.length){ node.textContent=text; return; }
+            const pattern=/\[(\d+)\]/g;
+            let cursor=0;
+            for(const match of text.matchAll(pattern)){
+                if(match.index>cursor) node.appendChild(document.createTextNode(text.slice(cursor,match.index)));
+                const number=Number(match[1]);
+                const citation=evidence[number-1];
+                if(citation?.chunk_id){
+                    const button=document.createElement('button');
+                    button.type='button';
+                    button.className='knowledge-citation-link';
+                    button.textContent=`[${number}]`;
+                    button.title=`查看索引片段：${citation.title||`引用 ${number}`}`;
+                    button.setAttribute('aria-label',`查看引用 ${number} 的索引片段`);
+                    button.addEventListener('click',()=>openKnowledgeCitation(citation,number));
+                    node.appendChild(button);
+                }else{
+                    node.appendChild(document.createTextNode(match[0]));
+                }
+                cursor=match.index+match[0].length;
+            }
+            if(cursor<text.length) node.appendChild(document.createTextNode(text.slice(cursor)));
+        }
+
+        let knowledgeCitationRequestId=0;
+        async function openKnowledgeCitation(citation,number){
+            if(!citation?.chunk_id) return;
+            const requestId=++knowledgeCitationRequestId;
+            const modal=document.getElementById('knowledgeCitationModal');
+            const title=document.getElementById('knowledgeCitationTitle');
+            const kicker=document.getElementById('knowledgeCitationKicker');
+            const body=document.getElementById('knowledgeCitationBody');
+            title.textContent=citation.title||`引用 ${number}`;
+            kicker.textContent=`知识库索引片段 [${number}]`;
+            body.innerHTML='<div class="knowledge-citation-loading">正在读取真实索引片段…</div>';
+            modal.hidden=false;
+            lucide.createIcons();
+            try{
+                const response=await fetch(`/api/knowledge-chunks/${encodeURIComponent(citation.chunk_id)}`,{headers:{'X-User-ID':userId}});
+                const data=await response.json();
+                if(!response.ok) throw new Error(data.detail||'无法读取索引片段');
+                if(requestId!==knowledgeCitationRequestId) return;
+                const chunk=data.chunk||{};
+                title.textContent=chunk.title||citation.title||`引用 ${number}`;
+                const location=[chunk.section||citation.section,chunk.page?`第 ${chunk.page} 页`:(citation.page?`第 ${citation.page} 页`:''),Number.isFinite(Number(chunk.ordinal))?`片段 #${Number(chunk.ordinal)+1}`:''].filter(Boolean);
+                body.innerHTML=`<div class="knowledge-citation-meta">${location.map(item=>`<span>${escapeHtml(item)}</span>`).join('')}<span>索引代次 ${escapeHtml(chunk.generation||'—')}</span><span title="${escapeHtml(chunk.id||citation.chunk_id)}">ID ${escapeHtml(String(chunk.id||citation.chunk_id).slice(0,12))}</span></div><pre class="knowledge-citation-content">${escapeHtml(chunk.text||citation.excerpt||'该片段没有可显示的文本。')}</pre>`;
+            }catch(error){
+                if(requestId!==knowledgeCitationRequestId) return;
+                body.innerHTML=`<div class="knowledge-citation-error">${escapeHtml(error.message||'索引片段加载失败')}</div>`;
+            }
+        }
+
+        function closeKnowledgeCitation(){
+            knowledgeCitationRequestId++;
+            document.getElementById('knowledgeCitationModal').hidden=true;
+        }
+
+        function addMessageBubble(msg,index=0,allMessages=[]){
             const box = document.getElementById('messages');
             const row = document.createElement('div');
             row.className = `bubble-row ${msg.role === 'user' ? 'user' : 'assistant'}`;
+            const stack = document.createElement('div');
+            stack.className='bubble-stack';
             const bubble = document.createElement('div');
             bubble.className = `bubble ${msg.role === 'user' ? 'user' : 'assistant'}`;
             if(['queued','running'].includes(msg.run_status)) bubble.classList.add('streaming');
@@ -2414,8 +2568,14 @@
             const imageUrls = Array.isArray(msg.image_urls) && msg.image_urls.length ? msg.image_urls : (msg.image_url ? [msg.image_url] : []);
             if(imageUrls.length) bubble.classList.add('image-bubble');
             const text = document.createElement('div');
-            text.textContent = msg.type === 'image' ? (msg.agent_reply || tr('chat.generated')) : (msg.content || '');
             text.className = 'bubble-text';
+            const bubbleContent=msg.type === 'image' ? (msg.agent_reply || tr('chat.generated')) : (msg.content || '');
+            if(msg.run_status==='failed'){
+                bubble.classList.add('run-error-card');
+                const info=msg.error_info||{};
+                text.innerHTML=`<div class="run-error-title"><i data-lucide="circle-alert"></i><span>任务生成失败</span></div><div class="run-error-summary">${escapeHtml(info.summary||bubbleContent||'上游请求失败')}</div><div class="run-error-meta">${escapeHtml([msg.provider_id,msg.model,msg.attempt?`已尝试 ${msg.attempt}/${msg.max_attempts||3} 次`:''].filter(Boolean).join(' · '))}</div><div class="run-error-actions"><button type="button" onclick="retryFailedRun('${escapeHtml(msg.run_id||'')}')"><i data-lucide="rotate-ccw"></i><span>重试</span></button><button type="button" onclick="this.closest('.run-error-card').querySelector('.run-error-details').hidden=!this.closest('.run-error-card').querySelector('.run-error-details').hidden"><i data-lucide="file-search"></i><span>查看详情</span></button></div><div class="run-error-details" hidden>${escapeHtml([info.exception_type,info.status_code?`HTTP ${info.status_code}`:'',info.upstream_request_id?`上游请求 ${info.upstream_request_id}`:'',info.diagnostic_id?`诊断编号 ${info.diagnostic_id}`:''].filter(Boolean).join('\n')||'没有更多技术信息')}</div>`;
+            }else if(msg.role==='assistant') renderKnowledgeCitationText(text,bubbleContent,msg.knowledge_citations);
+            else text.textContent=bubbleContent;
             bubble.appendChild(text);
             if(msg.attachments?.length){
                 const thumbs = document.createElement('div');
@@ -2447,10 +2607,97 @@
                 badge.textContent = modelShort;
                 bubble.appendChild(badge);
             }
-            row.appendChild(bubble);
+            stack.appendChild(bubble);
+            if(!msg.run_status || ['failed','cancelled','interrupted'].includes(msg.run_status)) stack.appendChild(buildMessageActions(msg,index,allMessages,bubbleContent));
+            row.appendChild(stack);
             box.appendChild(row);
             lucide.createIcons();
             return {row, bubble, text};
+        }
+
+        function actionButton(icon,title,handler){
+            const button=document.createElement('button');
+            button.type='button'; button.className='message-action'; button.title=title; button.setAttribute('aria-label',title);
+            button.innerHTML=`<i data-lucide="${icon}"></i>`; button.addEventListener('click',handler); return button;
+        }
+
+        function buildMessageActions(msg,index,allMessages,content){
+            const actions=document.createElement('div');
+            actions.className='message-actions';
+            actions.appendChild(actionButton('copy','复制消息',event=>copyMessage(content,event.currentTarget)));
+            if(msg.id&&msg.role==='user') actions.appendChild(actionButton('pencil','编辑消息',()=>beginEditMessage(msg,index)));
+            if(msg.id) actions.appendChild(actionButton('rotate-ccw','重新生成',()=>retryConversationMessage(msg.id)));
+            const graph=currentConversation?.message_graph;
+            const branches=Array.isArray(graph?.branches)?graph.branches:[];
+            if(index===allMessages.length-1&&branches.length>1){
+                actions.classList.add('has-versions');
+                const activeIndex=Math.max(0,branches.findIndex(item=>item.id===graph.active_branch_id));
+                const switcher=document.createElement('div');
+                switcher.className='version-switcher';
+                const previous=branches[(activeIndex-1+branches.length)%branches.length];
+                const next=branches[(activeIndex+1)%branches.length];
+                switcher.innerHTML=`<button type="button" title="上一个版本"><i data-lucide="chevron-left"></i></button><span>${activeIndex+1}/${branches.length}</span><button type="button" title="下一个版本"><i data-lucide="chevron-right"></i></button>`;
+                switcher.children[0].onclick=()=>activateMessageBranch(msg.id,previous.id);
+                switcher.children[2].onclick=()=>activateMessageBranch(msg.id,next.id);
+                actions.appendChild(switcher);
+            }
+            return actions;
+        }
+
+        async function copyMessage(content,button){
+            try{
+                await navigator.clipboard.writeText(String(content||''));
+                const original=button.innerHTML; button.innerHTML='<i data-lucide="check"></i>'; lucide.createIcons();
+                setTimeout(()=>{ if(button.isConnected){ button.innerHTML=original; lucide.createIcons(); } },1200);
+            }catch(e){ alert('复制失败，请手动选择文本。'); }
+        }
+
+        function beginEditMessage(msg,index){
+            if(activeRunForCurrentConversation()){ alert('当前对话正在生成，请先停止任务。'); return; }
+            const rows=document.querySelectorAll('.bubble-row');
+            const bubble=rows[index]?.querySelector('.bubble');
+            if(!bubble) return;
+            bubble.innerHTML=`<div class="message-edit-box"><textarea>${escapeHtml(msg.content||'')}</textarea><div class="message-edit-actions"><button type="button" data-cancel>取消</button><button type="button" data-save>保存并重新生成</button></div></div>`;
+            const textarea=bubble.querySelector('textarea');
+            bubble.querySelector('[data-cancel]').onclick=()=>renderCurrentRunStateForce();
+            bubble.querySelector('[data-save]').onclick=()=>editConversationMessage(msg.id,textarea.value);
+            textarea.focus(); textarea.setSelectionRange(textarea.value.length,textarea.value.length);
+        }
+
+        function renderCurrentRunStateForce(){ lastRenderedRunSignature=''; renderCurrentRunState(); }
+
+        async function acceptQueuedMessageAction(response){
+            const data=await response.json();
+            if(!response.ok) throw new Error(data.detail||'操作失败');
+            currentConversation=data.conversation||currentConversation;
+            if(data.run) runStates.set(data.run.id,data.run);
+            lastRenderedRunSignature=''; renderThreads(); renderCurrentRunState(); scheduleRunPolling();
+        }
+
+        async function editConversationMessage(messageId,content){
+            const value=String(content||'').trim(); if(!value) return;
+            try{ await acceptQueuedMessageAction(await fetch(`/api/conversations/${currentConversation.id}/messages/${messageId}/edit`,{method:'POST',headers:headers(),body:JSON.stringify({content:value})})); }
+            catch(e){ alert(e.message||'编辑失败'); renderCurrentRunStateForce(); }
+        }
+
+        async function retryConversationMessage(messageId){
+            if(activeRunForCurrentConversation()){ alert('当前对话正在生成，请先停止任务。'); return; }
+            try{ await acceptQueuedMessageAction(await fetch(`/api/conversations/${currentConversation.id}/messages/${messageId}/retry`,{method:'POST',headers:headers()})); }
+            catch(e){ alert(e.message||'重试失败'); }
+        }
+
+        async function retryFailedRun(runId){
+            if(!runId) return;
+            try{ await acceptQueuedMessageAction(await fetch(`/api/chat/runs/${runId}/retry`,{method:'POST',headers:headers()})); }
+            catch(e){ alert(e.message||'重试失败'); }
+        }
+
+        async function activateMessageBranch(messageId,branchId){
+            try{
+                const response=await fetch(`/api/conversations/${currentConversation.id}/messages/${messageId}/activate`,{method:'POST',headers:headers(),body:JSON.stringify({branch_id:branchId})});
+                const data=await response.json(); if(!response.ok) throw new Error(data.detail||'切换版本失败');
+                currentConversation=data.conversation; lastRenderedRunSignature=''; renderCurrentRunState();
+            }catch(e){ alert(e.message||'切换版本失败'); }
         }
 
         function openImagePreview(url){
@@ -2563,6 +2810,11 @@
                 resolveConfirmDialog(false);
                 return;
             }
+            if(e.key === 'Escape' && !document.getElementById('knowledgeCitationModal')?.hidden){
+                e.preventDefault();
+                closeKnowledgeCitation();
+                return;
+            }
             if(e.key === 'Escape' && !document.getElementById('knowledgePickerModal')?.hidden){
                 e.preventDefault();
                 closeOrdinaryKnowledgePicker();
@@ -2615,6 +2867,7 @@
                 provider: mode === 'image' ? activeImageProvider : currentProvider,
             };
             if(!currentConversation?.id && ordinaryKnowledgeDraft?.mode!=='none') payload.knowledge_context=ordinaryKnowledgeDraft;
+            if(!currentConversation?.id && pendingJinni?.id) payload.jinni_id=pendingJinni.id;
             return payload;
         }
 
@@ -2642,6 +2895,7 @@
                 if(!response.ok) throw new Error(data.detail || tr('chat.requestFailed'));
                 const serverMessages = data.conversation?.messages || previousConversation?.messages || [];
                 currentConversation = data.conversation;
+                pendingJinni = null;
                 ordinaryKnowledgeDraft={mode:'none',knowledge_base_ids:[]};
                 currentConversation.messages = [...serverMessages, {id:`pending-${clientRequestId}`, role:'user', content:message, attachments:pendingRefs, created_at:Date.now(), mode}];
                 runStates.set(data.run.id, data.run);

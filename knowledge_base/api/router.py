@@ -207,6 +207,20 @@ async def preview_document(knowledge_base_id: str, document_id: str, request: Re
             "blocks": selected, "next_cursor": index if has_more else None, "truncated": has_more}
 
 
+@router.get("/api/knowledge-chunks/{chunk_id}")
+async def preview_knowledge_chunk(chunk_id: str, request: Request, x_user_id: str = Header(default="")):
+    """Return one cited RAG chunk without exposing its source file path."""
+    user_id = safe_user_id(x_user_id, request)
+    rows = get_repository().chunks_by_ids(user_id, [chunk_id])
+    if not rows:
+        raise HTTPException(status_code=404, detail="索引片段不存在或已不可用")
+    row = rows[0]
+    return {"chunk": {key: row.get(key) for key in (
+        "id", "knowledge_base_id", "document_id", "version_id", "generation",
+        "ordinal", "title", "section", "page", "text",
+    )}}
+
+
 @router.post("/api/knowledge-bases/{knowledge_base_id}/entries")
 async def create_text_entry(knowledge_base_id: str, payload: TextEntryCreate, request: Request,
                             x_user_id: str = Header(default="")):

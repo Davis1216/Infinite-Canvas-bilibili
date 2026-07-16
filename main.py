@@ -2583,6 +2583,17 @@ class ChatRequest(BaseModel):
     ms_model: str = ""
     client_request_id: str = ""
     knowledge_context: Optional[Dict[str, Any]] = None
+    jinni_id: str = ""
+    # Internal task fields. They are accepted by the local API so a failed run
+    # can be replayed without trusting state reconstructed by the browser.
+    skip_user_append: bool = False
+    retry_attempt: int = 0
+
+class MessageEditRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=LLM_MESSAGE_MAX_LENGTH)
+
+class MessageActivateRequest(BaseModel):
+    branch_id: str = Field(min_length=1, max_length=120)
 
 def chat_system_prompt(payload):
     prompt = str(getattr(payload, "system_prompt", "") or "").strip()
@@ -4126,8 +4137,8 @@ def jinni_snapshot(jinni):
         )
     }
 
-def new_jinni_conversation(user_id, jinni):
-    conversation = new_conversation(user_id, jinni.get("name") or "Jinni 对话")
+def new_jinni_conversation(user_id, jinni, persist=True):
+    conversation = new_conversation(user_id, jinni.get("name") or "Jinni 对话", persist=False)
     conversation["jinni_id"] = jinni["id"]
     conversation["jinni_snapshot"] = jinni_snapshot(jinni)
     conversation["runtime_provider_id"] = jinni.get("provider_id") or ""
@@ -4143,9 +4154,10 @@ def new_jinni_conversation(user_id, jinni):
             generations[knowledge_base_id] = int(item.get("active_generation") or 1)
     conversation["knowledge_generations"] = generations
     conversation["updated_at"] = now_ms()
-    save_conversation(user_id, conversation)
-    jinni["last_used_at"] = now_ms()
-    save_jinni(user_id, jinni)
+    if persist:
+        save_conversation(user_id, conversation)
+        jinni["last_used_at"] = now_ms()
+        save_jinni(user_id, jinni)
     return conversation
 
 def _read_conversation_unlocked(path):
@@ -4176,6 +4188,8 @@ def _merge_conversation(existing, incoming):
     return merged
 
 def save_conversation(user_id, conversation):
+    _attach_pending_knowledge_citations(conversation)
+    _sync_active_message_branch(conversation)
     with CONVERSATION_LOCK:
         path = conversation_path(user_id, conversation["id"])
         if os.path.exists(path):
@@ -4187,7 +4201,39 @@ def save_conversation(user_id, conversation):
             json.dump(conversation, f, ensure_ascii=False, indent=2)
     return conversation
 
-def new_conversation(user_id, title="新对话"):
+def _sync_active_message_branch(conversation):
+    graph = conversation.get("message_graph") if isinstance(conversation, dict) else None
+    if not isinstance(graph, dict) or not isinstance(graph.get("branches"), list):
+        return
+    active_id = str(graph.get("active_branch_id") or "")
+    for branch in graph["branches"]:
+        if str(branch.get("id") or "") == active_id:
+            branch["messages"] = json.loads(json.dumps(conversation.get("messages") or [], ensure_ascii=False))
+            branch["updated_at"] = now_ms()
+            break
+
+def _attach_pending_knowledge_citations(conversation):
+    """Freeze the retrieval evidence onto the assistant message it supports."""
+    retrieval = conversation.get("last_knowledge_retrieval") if isinstance(conversation, dict) else None
+    messages = conversation.get("messages") if isinstance(conversation, dict) else None
+    if not isinstance(retrieval, dict) or not isinstance(messages, list) or not messages:
+        return
+    assistant = messages[-1]
+    if not isinstance(assistant, dict) or assistant.get("role") != "assistant":
+        return
+    if retrieval.get("assistant_message_id"):
+        return
+    previous_user = next((item for item in reversed(messages[:-1]) if item.get("role") == "user"), None)
+    if not previous_user or str(previous_user.get("content") or "") != str(retrieval.get("query") or ""):
+        return
+    citations = retrieval.get("citations") if isinstance(retrieval.get("citations"), list) else []
+    if not citations:
+        return
+    assistant["knowledge_citations"] = json.loads(json.dumps(citations, ensure_ascii=False))
+    assistant["knowledge_mode"] = str(retrieval.get("mode") or "")
+    retrieval["assistant_message_id"] = str(assistant.get("id") or "")
+
+def new_conversation(user_id, title="新对话", persist=True):
     timestamp = now_ms()
     conversation = {
         "id": uuid.uuid4().hex,
@@ -4197,7 +4243,8 @@ def new_conversation(user_id, title="新对话"):
         "pinned": False,
         "messages": [],
     }
-    save_conversation(user_id, conversation)
+    if persist:
+        save_conversation(user_id, conversation)
     return conversation
 
 def load_conversation(user_id, conversation_id):
@@ -4294,6 +4341,12 @@ def list_conversations(user_id, query=""):
             except Exception:
                 continue
             messages = data.get("messages", [])
+            status_lookup = globals().get("latest_chat_run_for_conversation")
+            latest_run = status_lookup(user_id, data.get("id")) if callable(status_lookup) else None
+            # Drafts are client-side only now. Hide legacy empty records unless
+            # they have a real task or were explicitly pinned by the user.
+            if not messages and not latest_run and not data.get("pinned") and not data.get("jinni_snapshot"):
+                continue
             if needle:
                 haystack = "\n".join([str(data.get("title") or "")] + [str(item.get("content") or "") for item in messages]).lower()
                 if needle not in haystack:
@@ -4315,8 +4368,6 @@ def list_conversations(user_id, query=""):
                     "avatar_url": snapshot.get("avatar_url") or "",
                     "deleted": not os.path.exists(jinni_path(user_id, data.get("jinni_id") or snapshot.get("id") or "missing")),
                 }
-            status_lookup = globals().get("latest_chat_run_for_conversation")
-            latest_run = status_lookup(user_id, data.get("id")) if callable(status_lookup) else None
             record["run_status"] = (latest_run or {}).get("status", "")
             records.append(record)
     return sorted(records, key=lambda item: (0 if item.get("pinned") else 1, -int(item.get("updated_at") or 0)))
@@ -8534,6 +8585,9 @@ def jinni_system_prompt(snapshot):
     )
 
 def prepare_jinni_chat_payload(payload, conversation, include_knowledge=True, user_id=""):
+    # A retrieval belongs to exactly one answer. Clear stale evidence before
+    # deciding whether this request performs a new knowledge lookup.
+    conversation.pop("last_knowledge_retrieval", None)
     snapshot = conversation.get("jinni_snapshot") if isinstance(conversation, dict) else None
     if isinstance(snapshot, dict):
         capabilities = snapshot.get("capabilities") if isinstance(snapshot.get("capabilities"), dict) else {}
@@ -8564,6 +8618,7 @@ def prepare_jinni_chat_payload(payload, conversation, include_knowledge=True, us
             "grounded": context.grounded,
             "citations": [item.model_dump() if hasattr(item, "model_dump") else item.dict() for item in context.citations],
             "mode": knowledge_mode,
+            "retrieved_at": now_ms(),
         }
     payload.system_prompt = base_prompt
     if not isinstance(snapshot, dict):
@@ -16697,6 +16752,31 @@ async def purge_canvas(canvas_id: str):
 
 # --- GPT 对话 ---
 
+def append_chat_user_message_once(conversation, payload, refs, mode=None):
+    """Append the submitted prompt once, including across automatic retries."""
+    messages = conversation.setdefault("messages", [])
+    if payload.skip_user_append:
+        existing = next((item for item in reversed(messages) if item.get("role") == "user"), None)
+        if existing and str(existing.get("content") or "") == str(payload.message or ""):
+            return existing
+    client_request_id = str(payload.client_request_id or "")
+    if client_request_id:
+        existing = next((item for item in reversed(messages) if item.get("client_request_id") == client_request_id), None)
+        if existing:
+            return existing
+    user_message = {
+        "id": uuid.uuid4().hex,
+        "role": "user",
+        "content": payload.message,
+        "created_at": now_ms(),
+        "attachments": refs,
+        "mode": mode or payload.mode,
+        "client_request_id": client_request_id,
+    }
+    messages.append(user_message)
+    conversation["updated_at"] = now_ms()
+    return user_message
+
 @app.post("/api/chat")
 async def chat(payload: ChatRequest, request: Request, x_user_id: str = Header(default="")):
     user_id = safe_user_id(x_user_id, request)
@@ -16711,15 +16791,7 @@ async def chat(payload: ChatRequest, request: Request, x_user_id: str = Header(d
 
     refs = [ref.dict() for ref in payload.reference_images if ref.url]
     image_refs = image_references(refs)
-    user_message = {
-        "id": uuid.uuid4().hex,
-        "role": "user",
-        "content": payload.message,
-        "created_at": now_ms(),
-        "attachments": refs,
-        "mode": payload.mode,
-    }
-    conversation["messages"].append(user_message)
+    append_chat_user_message_once(conversation, payload, refs)
     conversation["updated_at"] = now_ms()
     save_conversation(user_id, conversation)
 
@@ -16854,15 +16926,7 @@ async def chat_agent(payload: ChatRequest, request: Request, x_user_id: str = He
 
     refs = [ref.dict() for ref in payload.reference_images if ref.url]
     image_refs = image_references(refs)
-    user_message = {
-        "id": uuid.uuid4().hex,
-        "role": "user",
-        "content": payload.message,
-        "created_at": now_ms(),
-        "attachments": refs,
-        "mode": "agent",
-    }
-    conversation["messages"].append(user_message)
+    append_chat_user_message_once(conversation, payload, refs, "agent")
     conversation["updated_at"] = now_ms()
     save_conversation(user_id, conversation)
 
@@ -16949,15 +17013,7 @@ async def chat_stream(payload: ChatRequest, request: Request, x_user_id: str = H
         conversation["title"] = display_title(payload.message)
 
     refs = [ref.dict() for ref in payload.reference_images if ref.url]
-    user_message = {
-        "id": uuid.uuid4().hex,
-        "role": "user",
-        "content": payload.message,
-        "created_at": now_ms(),
-        "attachments": refs,
-        "mode": payload.mode,
-    }
-    conversation["messages"].append(user_message)
+    append_chat_user_message_once(conversation, payload, refs)
     conversation["updated_at"] = now_ms()
     save_conversation(user_id, conversation)
 
@@ -17047,7 +17103,15 @@ async def chat_stream(payload: ChatRequest, request: Request, x_user_id: str = H
                         detail = await response.aread()
                         body = detail.decode("utf-8", errors="ignore")
                         friendly = friendly_chat_error_detail(body, model, _stream_provider)
-                        yield sse_event({"type": "error", "detail": friendly or f"上游接口错误：{body}"})
+                        yield sse_event({
+                            "type": "error",
+                            "detail": friendly or f"上游接口错误：{body[:600]}",
+                            "status_code": response.status_code,
+                            "exception_type": "UpstreamHTTPError",
+                            "upstream_request_id": response.headers.get("x-request-id") or response.headers.get("request-id") or "",
+                            "retryable": response.status_code in {408, 429, 500, 502, 503, 504},
+                            "retry_after": response.headers.get("retry-after") or "",
+                        })
                         return
                     async for line in response.aiter_lines():
                         if not line:
@@ -17068,7 +17132,13 @@ async def chat_stream(payload: ChatRequest, request: Request, x_user_id: str = H
                             yield sse_event({"type": "delta", "delta": delta})
         except httpx.HTTPError as exc:
             log_net_error("对话(流式) 网络/TLS错误", exc)
-            yield sse_event({"type": "error", "detail": f"请求上游接口失败：{exc}"})
+            detail = str(exc).strip() or exc.__class__.__name__
+            yield sse_event({
+                "type": "error",
+                "detail": f"请求上游接口失败：{detail}",
+                "exception_type": exc.__class__.__name__,
+                "retryable": isinstance(exc, (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError, httpx.PoolTimeout, httpx.ReadTimeout, httpx.ConnectTimeout)),
+            })
             return
 
         assistant_message = {
@@ -17108,7 +17178,7 @@ def chat_run_path(user_id, run_id):
     return os.path.join(chat_run_user_dir(user_id), f"{cleaned}.json")
 
 def public_chat_run(run):
-    return {key: value for key, value in (run or {}).items() if key != "user_id"}
+    return {key: value for key, value in (run or {}).items() if key not in {"user_id", "request_snapshot"}}
 
 def save_chat_run(run):
     snapshot = dict(run)
@@ -17199,11 +17269,40 @@ def recover_chat_runs():
 
 recover_chat_runs()
 
+class ChatRunFailure(RuntimeError):
+    def __init__(self, detail, *, status_code=0, exception_type="", upstream_request_id="", retryable=False, retry_after=0):
+        super().__init__(detail)
+        self.status_code = int(status_code or 0)
+        self.exception_type = exception_type or self.__class__.__name__
+        self.upstream_request_id = str(upstream_request_id or "")[:160]
+        self.retryable = bool(retryable)
+        self.retry_after = max(0.0, min(float(retry_after or 0), 30.0))
+
 def chat_run_error_detail(exc):
     detail = getattr(exc, "detail", None)
     if isinstance(detail, (dict, list)):
         return json.dumps(detail, ensure_ascii=False)
     return str(detail or exc or "任务执行失败")
+
+def chat_run_error_info(exc, diagnostic_id):
+    status_code = int(getattr(exc, "status_code", 0) or getattr(exc, "status", 0) or 0)
+    if isinstance(exc, HTTPException):
+        status_code = int(exc.status_code or 0)
+    exception_type = str(getattr(exc, "exception_type", "") or exc.__class__.__name__)
+    detail = chat_run_error_detail(exc).strip() or exception_type
+    retryable = bool(getattr(exc, "retryable", False))
+    if not retryable:
+        retryable = status_code in {408, 429, 500, 502, 503, 504} or isinstance(
+            exc, (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError, httpx.PoolTimeout, httpx.ReadTimeout, httpx.ConnectTimeout)
+        )
+    return {
+        "summary": detail[:800],
+        "exception_type": exception_type[:120],
+        "status_code": status_code,
+        "upstream_request_id": str(getattr(exc, "upstream_request_id", "") or "")[:160],
+        "diagnostic_id": diagnostic_id,
+        "retryable": retryable,
+    }
 
 async def consume_chat_stream_for_run(run_id, response):
     buffer = ""
@@ -17229,39 +17328,83 @@ async def consume_chat_stream_for_run(run_id, response):
                 if should_persist:
                     last_persisted = time.monotonic()
             elif event.get("type") == "error":
-                raise RuntimeError(event.get("detail") or "请求失败")
+                retry_after = event.get("retry_after") or 0
+                try:
+                    retry_after = float(retry_after)
+                except (TypeError, ValueError):
+                    retry_after = 0
+                raise ChatRunFailure(
+                    event.get("detail") or "请求失败",
+                    status_code=event.get("status_code") or 0,
+                    exception_type=event.get("exception_type") or "UpstreamError",
+                    upstream_request_id=event.get("upstream_request_id") or "",
+                    retryable=event.get("retryable", False),
+                    retry_after=retry_after,
+                )
             elif event.get("type") == "done":
                 final_event = event
     return final_event or {}
 
 async def run_chat_background(run_id, payload, request, user_id):
-    set_chat_run_fields(run_id, status="running", started_at=now_ms(), error="")
+    diagnostic_id = str((CHAT_RUNS.get(run_id) or {}).get("diagnostic_id") or f"diag_{uuid.uuid4().hex[:12]}")
+    max_attempts = int((CHAT_RUNS.get(run_id) or {}).get("max_attempts") or 3)
+    set_chat_run_fields(run_id, status="running", started_at=now_ms(), error="", diagnostic_id=diagnostic_id)
     try:
-        if payload.mode == "agent":
-            result = await chat_agent(payload, request, user_id)
-            final_event = result if isinstance(result, dict) else {}
-        elif payload.mode == "image":
-            result = await chat(payload, request, user_id)
-            final_event = result if isinstance(result, dict) else {}
-        else:
-            response = await chat_stream(payload, request, user_id)
-            final_event = await consume_chat_stream_for_run(run_id, response)
-        message = final_event.get("message") or {}
-        set_chat_run_fields(
-            run_id,
-            status="succeeded",
-            partial_content=str(message.get("content") or (CHAT_RUNS.get(run_id) or {}).get("partial_content") or ""),
-            result_message_id=message.get("id") or "",
-            finished_at=now_ms(),
-            error="",
-        )
+        for attempt in range(1, max_attempts + 1):
+            attempt_started = now_ms()
+            set_chat_run_fields(run_id, attempt=attempt, status="running", next_retry_at=0)
+            try:
+                payload.retry_attempt = attempt - 1
+                payload.skip_user_append = attempt > 1 or bool(payload.skip_user_append)
+                if payload.mode == "agent":
+                    result = await chat_agent(payload, request, user_id)
+                    final_event = result if isinstance(result, dict) else {}
+                elif payload.mode == "image":
+                    result = await chat(payload, request, user_id)
+                    final_event = result if isinstance(result, dict) else {}
+                else:
+                    response = await chat_stream(payload, request, user_id)
+                    final_event = await consume_chat_stream_for_run(run_id, response)
+                message = final_event.get("message") or {}
+                attempts = list((CHAT_RUNS.get(run_id) or {}).get("attempts") or [])
+                attempts.append({"attempt": attempt, "started_at": attempt_started, "finished_at": now_ms(), "status": "succeeded"})
+                set_chat_run_fields(
+                    run_id, status="succeeded", attempts=attempts,
+                    partial_content=str(message.get("content") or (CHAT_RUNS.get(run_id) or {}).get("partial_content") or ""),
+                    result_message_id=message.get("id") or "", finished_at=now_ms(), error="", error_info=None,
+                )
+                break
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                info = chat_run_error_info(exc, diagnostic_id)
+                attempts = list((CHAT_RUNS.get(run_id) or {}).get("attempts") or [])
+                attempts.append({
+                    "attempt": attempt, "started_at": attempt_started, "finished_at": now_ms(),
+                    "status": "failed", "exception_type": info["exception_type"], "status_code": info["status_code"],
+                    "summary": info["summary"], "upstream_request_id": info["upstream_request_id"], "retryable": info["retryable"],
+                })
+                current = CHAT_RUNS.get(run_id) or {}
+                has_partial = bool(str(current.get("partial_content") or ""))
+                can_retry = info["retryable"] and not has_partial and attempt < max_attempts
+                logging.getLogger("jinni.chat").error(
+                    "chat run failed diagnostic=%s run=%s provider=%s model=%s attempt=%s/%s status=%s type=%s detail=%s\n%s",
+                    diagnostic_id, run_id, current.get("provider_id"), current.get("model"), attempt, max_attempts,
+                    info["status_code"], info["exception_type"], info["summary"], traceback.format_exc(),
+                )
+                if can_retry:
+                    delay = float(getattr(exc, "retry_after", 0) or [1, 3, 8][min(attempt - 1, 2)])
+                    delay = min(max(delay + random.uniform(0, 0.35), 0.25), 30.0)
+                    set_chat_run_fields(run_id, status="running", attempts=attempts, error_info=info, next_retry_at=now_ms() + int(delay * 1000))
+                    await asyncio.sleep(delay)
+                    continue
+                set_chat_run_fields(run_id, status="failed", attempts=attempts, error=info["summary"], error_info=info, finished_at=now_ms())
+                break
     except asyncio.CancelledError:
         current = CHAT_RUNS.get(run_id) or {}
         if current.get("status") not in {"cancelled", "interrupted"}:
             set_chat_run_fields(run_id, status="cancelled", error="已停止生成", finished_at=now_ms())
         raise
-    except Exception as exc:
-        set_chat_run_fields(run_id, status="failed", error=chat_run_error_detail(exc), finished_at=now_ms())
     finally:
         CHAT_RUN_TASKS.pop(run_id, None)
 
@@ -17277,7 +17420,11 @@ async def create_chat_run(payload: ChatRequest, request: Request, x_user_id: str
     if payload.conversation_id:
         conversation = load_conversation(user_id, payload.conversation_id)
     else:
-        conversation = new_conversation(user_id, display_title(payload.message))
+        if payload.jinni_id:
+            jinni = load_jinni(user_id, payload.jinni_id)
+            conversation = new_jinni_conversation(user_id, jinni, persist=False)
+        else:
+            conversation = new_conversation(user_id, display_title(payload.message), persist=False)
         payload.conversation_id = conversation["id"]
     if is_new_conversation and payload.knowledge_context is not None:
         try:
@@ -17285,17 +17432,19 @@ async def create_chat_run(payload: ChatRequest, request: Request, x_user_id: str
                 get_knowledge_repository(), user_id, payload.knowledge_context
             )
         except ValueError as exc:
-            # Do not leave a blank history item behind when a draft binding is invalid.
-            try:
-                os.remove(conversation_path(user_id, conversation["id"]))
-            except OSError:
-                pass
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        save_conversation(user_id, conversation)
     prepare_jinni_chat_payload(payload, conversation, include_knowledge=True, user_id=user_id)
     active = active_chat_run_for_conversation(user_id, conversation["id"])
     if active:
         raise HTTPException(status_code=409, detail="当前对话正在生成，请等待完成或先停止任务")
+
+    # Persist only after all draft/Jinni/knowledge validation succeeds. From
+    # this point the request is a real queued task and belongs in history.
+    if is_new_conversation:
+        save_conversation(user_id, conversation)
+        if payload.jinni_id:
+            jinni["last_used_at"] = now_ms()
+            save_jinni(user_id, jinni)
 
     timestamp = now_ms()
     run = {
@@ -17315,9 +17464,26 @@ async def create_chat_run(payload: ChatRequest, request: Request, x_user_id: str
         "updated_at": timestamp,
         "started_at": 0,
         "finished_at": 0,
+        "attempt": 0,
+        "max_attempts": 3,
+        "attempts": [],
+        "diagnostic_id": f"diag_{uuid.uuid4().hex[:12]}",
+        "error_info": None,
+        "next_retry_at": 0,
+        "retry_of_run_id": "",
     }
-    save_chat_run(run)
     payload_snapshot = payload.model_copy(deep=True) if hasattr(payload, "model_copy") else payload.copy(deep=True)
+    snapshot_data = payload_snapshot.model_dump(mode="json") if hasattr(payload_snapshot, "model_dump") else payload_snapshot.dict()
+    run["request_snapshot"] = snapshot_data
+    try:
+        save_chat_run(run)
+    except Exception:
+        if is_new_conversation:
+            try:
+                os.remove(conversation_path(user_id, conversation["id"]))
+            except OSError:
+                pass
+        raise
     task = asyncio.create_task(run_chat_background(run["id"], payload_snapshot, request, user_id))
     CHAT_RUN_TASKS[run["id"]] = task
     return {"run": public_chat_run(run), "conversation": conversation, "duplicate": False}
@@ -17351,6 +17517,143 @@ async def cancel_chat_run(run_id: str, request: Request, x_user_id: str = Header
     with CHAT_RUN_LOCK:
         latest = dict(CHAT_RUNS.get(run_id) or run)
     return {"run": public_chat_run(latest)}
+
+@app.post("/api/chat/runs/{run_id}/retry", status_code=202)
+async def retry_chat_run(run_id: str, request: Request, x_user_id: str = Header(default="")):
+    user_id = safe_user_id(x_user_id, request)
+    with CHAT_RUN_LOCK:
+        original = dict(CHAT_RUNS.get(run_id) or {})
+    if not original or original.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if original.get("status") in CHAT_RUN_ACTIVE_STATUSES:
+        raise HTTPException(status_code=409, detail="任务仍在运行")
+    snapshot = original.get("request_snapshot")
+    if not isinstance(snapshot, dict):
+        raise HTTPException(status_code=409, detail="该历史任务缺少安全重试快照，请重新发送消息")
+    retry_payload = ChatRequest(**snapshot)
+    retry_payload.client_request_id = f"retry-{uuid.uuid4().hex}"
+    retry_payload.skip_user_append = True
+    retry_payload.retry_attempt = 0
+    result = await create_chat_run(retry_payload, request, user_id)
+    new_run = result.get("run") or {}
+    if new_run.get("id"):
+        updated = set_chat_run_fields(new_run["id"], retry_of_run_id=run_id)
+        result["run"] = public_chat_run(updated or new_run)
+    return result
+
+def ensure_conversation_message_graph(conversation):
+    messages = conversation.setdefault("messages", [])
+    for message in messages:
+        if not message.get("id"):
+            message["id"] = uuid.uuid4().hex
+    graph = conversation.get("message_graph")
+    if not isinstance(graph, dict) or not isinstance(graph.get("branches"), list):
+        branch_id = f"branch_{uuid.uuid4().hex[:12]}"
+        graph = {
+            "version": 1,
+            "active_branch_id": branch_id,
+            "branches": [{
+                "id": branch_id, "label": "原始版本", "created_at": now_ms(),
+                "messages": json.loads(json.dumps(messages, ensure_ascii=False)),
+            }],
+        }
+        conversation["message_graph"] = graph
+    else:
+        _sync_active_message_branch(conversation)
+    return graph
+
+def message_action_payload(user_id, conversation, user_message):
+    latest = latest_chat_run_for_conversation(user_id, conversation["id"])
+    snapshot = (latest or {}).get("request_snapshot")
+    if isinstance(snapshot, dict):
+        data = dict(snapshot)
+        data["message"] = str(user_message.get("content") or "")
+        data["conversation_id"] = conversation["id"]
+        data["reference_images"] = user_message.get("attachments") or []
+        data["mode"] = user_message.get("mode") or data.get("mode") or "chat"
+    else:
+        data = {
+            "conversation_id": conversation["id"], "message": str(user_message.get("content") or ""),
+            "reference_images": user_message.get("attachments") or [], "mode": user_message.get("mode") or "chat",
+            "provider": conversation.get("runtime_provider_id") or "comfly",
+            "model": conversation.get("runtime_model") or "",
+        }
+    data.update({"client_request_id": f"branch-{uuid.uuid4().hex}", "skip_user_append": True, "retry_attempt": 0})
+    return ChatRequest(**data)
+
+async def queue_message_branch(user_id, conversation, user_index, request, label, edited_content=None):
+    if active_chat_run_for_conversation(user_id, conversation["id"]):
+        raise HTTPException(status_code=409, detail="当前对话正在生成，请等待完成或先停止任务")
+    original_messages = json.loads(json.dumps(conversation.get("messages") or [], ensure_ascii=False))
+    original_graph = json.loads(json.dumps(conversation.get("message_graph"), ensure_ascii=False)) if conversation.get("message_graph") else None
+    graph = ensure_conversation_message_graph(conversation)
+    prefix = json.loads(json.dumps(original_messages[:user_index + 1], ensure_ascii=False))
+    user_message = prefix[-1]
+    if edited_content is not None:
+        user_message.update({
+            "id": uuid.uuid4().hex, "content": edited_content.strip(), "created_at": now_ms(),
+            "client_request_id": f"edit-{uuid.uuid4().hex}",
+        })
+    branch_id = f"branch_{uuid.uuid4().hex[:12]}"
+    branch = {"id": branch_id, "label": label, "created_at": now_ms(), "messages": prefix}
+    graph["branches"].append(branch)
+    graph["active_branch_id"] = branch_id
+    conversation["messages"] = prefix
+    conversation["updated_at"] = now_ms()
+    save_conversation(user_id, conversation)
+    try:
+        result = await create_chat_run(message_action_payload(user_id, conversation, user_message), request, user_id)
+        result["conversation"] = load_conversation(user_id, conversation["id"])
+        return result
+    except Exception:
+        conversation["messages"] = original_messages
+        if original_graph is None:
+            conversation.pop("message_graph", None)
+        else:
+            conversation["message_graph"] = original_graph
+        save_conversation(user_id, conversation)
+        raise
+
+@app.post("/api/conversations/{conversation_id}/messages/{message_id}/edit", status_code=202)
+async def edit_conversation_message(conversation_id: str, message_id: str, payload: MessageEditRequest, request: Request, x_user_id: str = Header(default="")):
+    user_id = safe_user_id(x_user_id, request)
+    conversation = load_conversation(user_id, conversation_id)
+    index = next((i for i, item in enumerate(conversation.get("messages") or []) if item.get("id") == message_id), -1)
+    if index < 0:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    if conversation["messages"][index].get("role") != "user":
+        raise HTTPException(status_code=400, detail="只能编辑用户消息")
+    return await queue_message_branch(user_id, conversation, index, request, "编辑版本", payload.content)
+
+@app.post("/api/conversations/{conversation_id}/messages/{message_id}/retry", status_code=202)
+async def retry_conversation_message(conversation_id: str, message_id: str, request: Request, x_user_id: str = Header(default="")):
+    user_id = safe_user_id(x_user_id, request)
+    conversation = load_conversation(user_id, conversation_id)
+    messages = conversation.get("messages") or []
+    index = next((i for i, item in enumerate(messages) if item.get("id") == message_id), -1)
+    if index < 0:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    if messages[index].get("role") == "assistant":
+        index = next((i for i in range(index - 1, -1, -1) if messages[i].get("role") == "user"), -1)
+    if index < 0 or messages[index].get("role") != "user":
+        raise HTTPException(status_code=400, detail="没有可重试的用户消息")
+    return await queue_message_branch(user_id, conversation, index, request, "重新生成")
+
+@app.post("/api/conversations/{conversation_id}/messages/{message_id}/activate")
+async def activate_conversation_message_branch(conversation_id: str, message_id: str, payload: MessageActivateRequest, request: Request, x_user_id: str = Header(default="")):
+    user_id = safe_user_id(x_user_id, request)
+    conversation = load_conversation(user_id, conversation_id)
+    if active_chat_run_for_conversation(user_id, conversation_id):
+        raise HTTPException(status_code=409, detail="生成期间不能切换消息版本")
+    graph = ensure_conversation_message_graph(conversation)
+    branch = next((item for item in graph["branches"] if item.get("id") == payload.branch_id), None)
+    if not branch:
+        raise HTTPException(status_code=404, detail="消息版本不存在")
+    graph["active_branch_id"] = payload.branch_id
+    conversation["messages"] = json.loads(json.dumps(branch.get("messages") or [], ensure_ascii=False))
+    conversation["updated_at"] = now_ms()
+    save_conversation(user_id, conversation)
+    return {"conversation": conversation}
 
 # --- 历史记录 ---
 
