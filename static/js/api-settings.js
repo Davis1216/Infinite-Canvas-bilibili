@@ -94,6 +94,9 @@ const GEMINI_CLI_DEFAULT_IMAGE_MODELS = ['auto'];
 const GEMINI_CLI_DEFAULT_CHAT_MODELS = ['auto'];
 const CLI_PROTOCOLS = new Set(['jimeng', 'codex', 'gemini-cli']);
 const API_PROTOCOLS = ['openai', 'apimart', 'gemini', 'volcengine', 'runninghub', 'jimeng', 'codex', 'gemini-cli'];
+// 这些历史平台继续参与配置保存，避免升级时破坏旧数据，但不再出现在 API 设置界面。
+const HIDDEN_API_SETTINGS_PROVIDER_IDS = new Set(['modelscope', 'runninghub']);
+const HIDDEN_API_SETTINGS_PROTOCOLS = new Set(['runninghub', 'jimeng', 'codex', 'gemini-cli']);
 const CLI_PROVIDER_PRESETS = {
     jimeng:{id:'jimeng', name:'即梦 CLI', protocol:'jimeng'},
     codex:{id:'codex', name:'GPT CLI', protocol:'codex'},
@@ -361,10 +364,14 @@ function updateIdPreview(){
     idPreview.textContent = deriveIdFromName(nameInput.value, item.id);
 }
 function provider(){
-    return visibleProviders().find(item => item.id === selectedId) || visibleProviders()[0] || providers[0];
+    const visible = visibleProviders();
+    return visible.find(item => item.id === selectedId) || visible[0];
 }
 function isProviderTemporarilyHidden(item){
-    return false;
+    if(!item) return false;
+    const id = String(item.id || '').trim().toLowerCase();
+    const protocol = String(item.protocol || '').trim().toLowerCase();
+    return HIDDEN_API_SETTINGS_PROVIDER_IDS.has(id) || HIDDEN_API_SETTINGS_PROTOCOLS.has(protocol);
 }
 function visibleProviders(){
     return (providers || []).filter(item => !isProviderTemporarilyHidden(item));
@@ -2282,7 +2289,7 @@ async function saveRecommendedApi(index){
     if(ok) setStatus(trf('api.recommendSaved', {name:api.name}));
 }
 function sortedProviders(){
-    const order = ['modelscope', 'runninghub', 'volcengine'];
+    const order = ['volcengine'];
     return visibleProviders().sort((a, b) => {
         const ai = order.indexOf(a.id);
         const bi = order.indexOf(b.id);
@@ -2298,7 +2305,8 @@ function providerDragAttrs(item){
     return ` draggable="true" data-provider-id="${id}" ondragstart="handleProviderDragStart(event,'${id}')" ondragover="handleProviderDragOver(event,'${id}')" ondrop="handleProviderDrop(event,'${id}')" ondragend="handleProviderDragEnd()"`;
 }
 function renderProviderList(){
-    providerList.innerHTML = sortedProviders().map(item => {
+    const visible = sortedProviders();
+    providerList.innerHTML = visible.length ? visible.map(item => {
         const active = item.id === selectedId ? 'active' : '';
         const itemProtocol = String(item.protocol || 'openai').toLowerCase();
         const stateClass = item.enabled === false ? 'is-disabled' : (item.has_key || item.has_wallet_key || CLI_PROTOCOLS.has(itemProtocol) ? 'has-key' : 'missing-key');
@@ -2359,7 +2367,7 @@ function renderProviderList(){
                 </span>
             </button>
         `;
-    }).join('');
+    }).join('') : '<div class="provider-list-empty">暂无平台，请点击“新增平台”开始配置。</div>';
     refreshIcons();
 }
 function handleProviderDragStart(event, id){
@@ -2403,7 +2411,12 @@ function handleProviderDragEnd(){
 }
 function renderEditor(){
     const item = provider();
-    if(!item) return;
+    if(!item){
+        renderProviderList();
+        if(settingsContent) settingsContent.hidden = true;
+        return;
+    }
+    if(settingsContent) settingsContent.hidden = false;
     editorTitle.textContent = item.name || item.id;
     nameInput.value = item.name || '';
     idInput.value = item.id || '';
@@ -3336,7 +3349,8 @@ function removeMsLora(index){
     renderMsLoras();
 }
 function selectProvider(id){
-    if(isProviderTemporarilyHidden(providers.find(item => item.id === id))) return;
+    const next = providers.find(item => item.id === id);
+    if(!next || isProviderTemporarilyHidden(next)) return;
     recommendInlineOpen = false;
     syncRecommendView();
     renderRecommendApi();
@@ -3533,7 +3547,6 @@ async function loadProviders(){
         providers = data.providers || [];
         selectedId = sortedProviders()[0]?.id || '';
         renderEditor();
-        openRecommendApi();
         setStatus('');
     } catch(err) {
         setStatus(tr('api.loadFailed'));
@@ -3636,7 +3649,7 @@ async function saveProviders(){
             delete item._clearVolcengineAccessKey;
             delete item._clearVolcengineSecretKey;
         });
-        selectedId = provider()?.id || providers[0]?.id || '';
+        selectedId = provider()?.id || sortedProviders()[0]?.id || '';
         renderEditor();
         setStatus(tr('api.saved'));
         // 广播变更，画布等其他 iframe 立即重新拉取最新平台/模型列表

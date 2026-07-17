@@ -61,10 +61,19 @@
         return models.map(model => ({ value:model, label:model }));
     }
 
+    function providerReadyForSelection(provider){
+        if(!provider || provider.enabled === false) return false;
+        const id = String(provider.id || '').trim().toLowerCase();
+        const protocol = String(provider.protocol || '').trim().toLowerCase();
+        if(id === 'modelscope') return provider.has_key === true;
+        if(id === 'runninghub' || protocol === 'runninghub') return provider.has_key === true || provider.has_wallet_key === true;
+        return true;
+    }
+
     function imageProviders(cfg){
         const providers = Array.isArray(cfg?.api_providers) ? cfg.api_providers : [];
         return providers.filter(provider => {
-            if(!provider || provider.enabled === false) return false;
+            if(!providerReadyForSelection(provider)) return false;
             if(provider.id === 'modelscope') return false;
             if(provider.id === 'comfy' || provider.id === 'comfly') return false;
             return providerModels(provider, cfg).length > 0;

@@ -21,6 +21,7 @@ button { font-family:inherit; cursor:pointer; border:0; background:transparent; 
 .sidebar { display:flex; flex-direction:column; gap:12px; position:sticky; top:32px; max-height:calc(100vh - 64px); overflow-y:auto; -webkit-overflow-scrolling:touch; padding:16px; background:var(--panel); border:1px solid var(--line); border-radius:16px; }
 .side-section-title { color:var(--faint); font-size:10px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; padding:2px 4px; }
 .provider-list { display:flex; flex-direction:column; gap:4px; padding-bottom:8px; border-bottom:1px solid var(--line); margin-bottom:4px; }
+.provider-list-empty { padding:16px 12px; border:1px dashed var(--line); border-radius:12px; color:var(--faint); font-size:12px; line-height:1.6; text-align:center; }
 .provider-card { width:100%; text-align:left; border:1px solid transparent; background:transparent; border-radius:12px; padding:8px 10px; display:flex; align-items:center; gap:10px; color:var(--muted); transition:all .15s ease; min-height:48px; }
 .provider-card:hover { border-color:var(--text); color:var(--text); }
 .provider-card.active { background:var(--soft); color:var(--text); border-color:transparent; }

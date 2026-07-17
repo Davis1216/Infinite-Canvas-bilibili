@@ -19,7 +19,7 @@
     <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
-    <script src="/static/js/i18n.js?v=2026.07.4.2.1784029505"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1784104411"></script>
     <script src="/static/js/image-preview.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/history-bulk-manager.js?v=2026.07.4.2.1783154122"></script>
     <style>
@@ -406,8 +406,16 @@
             const seen = new Set();
             return (list || []).map(item => String(item || '').trim()).filter(item => item && !seen.has(item) && seen.add(item));
         }
+        function providerReadyForSelection(item){
+            if(!item || item.enabled === false) return false;
+            const id = String(item.id || '').trim().toLowerCase();
+            const protocol = String(item.protocol || '').trim().toLowerCase();
+            if(id === 'modelscope') return item.has_key === true;
+            if(id === 'runninghub' || protocol === 'runninghub') return item.has_key === true || item.has_wallet_key === true;
+            return true;
+        }
         function imageProviders(){
-            const list = (apiProviders || []).filter(p => p.enabled !== false && (
+            const list = (apiProviders || []).filter(p => providerReadyForSelection(p) && (
                 (p.image_models || []).length || (p.rh_apps || []).length || (p.rh_workflows || []).length
             ));
             return list.length ? list : [{id:'comfly', name:'Comfly', image_models:[models.gpt, models.nano]}];

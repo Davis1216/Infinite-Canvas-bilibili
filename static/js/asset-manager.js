@@ -2,6 +2,7 @@ const root = document.getElementById('assetManagerRoot');
 const statusEl = document.getElementById('assetStatus');
 const refreshBtn = document.getElementById('refreshBtn');
 const uploadInput = document.getElementById('assetUploadInput');
+const promptPackInput = document.getElementById('promptPackInput');
 
 const LOCAL_CAPTION_SETTINGS_KEY = 'asset_manager_local_caption_settings_v1';
 function readLocalCaptionSettings(){
@@ -58,6 +59,7 @@ let managedSelectionPointerGuard = null;
 let assetEditMode = false;
 let promptEditMode = false;
 let promptCreateMode = false;
+let promptPackState = null;
 let pendingDeleteAssetId = '';
 let pendingDeletePromptId = '';
 let pendingBatchDelete = '';
@@ -114,7 +116,13 @@ const LOCAL_MEDIA_EXTS = /\.(png|jpe?g|webp|gif|bmp|avif|svg|mp4|webm|mov|m4v|mp
 const SEARCH_INPUT_IDS = new Set(['assetSearch','workflowSearch','promptSearch','localSearch','localUploadSearch','canvasAssetSearch']);
 
 function refreshIcons(){ if(window.lucide) lucide.createIcons(); }
-function setStatus(text='准备就绪'){ if(statusEl) statusEl.textContent = text || '准备就绪'; }
+function setStatus(text='准备就绪', tone=''){
+    if(!statusEl) return;
+    const message = text || '准备就绪';
+    statusEl.textContent = message;
+    statusEl.title = message;
+    statusEl.classList.toggle('error', tone === 'error');
+}
 function escapeHtml(value=''){
     return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
@@ -479,8 +487,16 @@ function localItemsForFolder(folderId=activeLocalFolderId){
         return [item.name, item.relativePath, assetKindLabel(item)].join(' ').toLowerCase().includes(query);
     });
 }
+function providerReadyForAssetSelection(provider){
+    if(!provider || provider.enabled === false) return false;
+    const id = String(provider.id || '').trim().toLowerCase();
+    const protocol = String(provider.protocol || '').trim().toLowerCase();
+    if(id === 'modelscope') return provider.has_key === true;
+    if(id === 'runninghub' || protocol === 'runninghub') return provider.has_key === true || provider.has_wallet_key === true;
+    return true;
+}
 function localCaptionProviders(){
-    return (apiProviders || []).filter(p => p && p.enabled !== false && Array.isArray(p.chat_models) && p.chat_models.length);
+    return (apiProviders || []).filter(p => providerReadyForAssetSelection(p) && Array.isArray(p.chat_models) && p.chat_models.length);
 }
 function normalizeLocalCaptionSettings(){
     const providers = localCaptionProviders();
@@ -821,7 +837,7 @@ function avatarPlatformLabel(platform){
 // 列出 API 设置里所有启用的 provider 作为认证候选（以 API 设置为中心，由用户自己选平台）；
 // 不支持的平台也列出，在下拉里标注「待接入」，避免用户以为漏了。
 function avatarCandidateProviders(){
-    return (apiProviders || []).filter(p => p && p.enabled !== false);
+    return (apiProviders || []).filter(providerReadyForAssetSelection);
 }
 function activeAvatarProvider(){
     const list = avatarCandidateProviders();
@@ -2089,6 +2105,8 @@ function renderPromptManager(){
                 </div>
                 <div class="asset-tools">
                     <label class="asset-search-wrap"><i data-lucide="search"></i><input id="promptSearch" class="asset-search" type="search" value="${escapeAttr(promptQuery)}" placeholder="搜索名称、说明或正文"></label>
+                    <button class="asset-btn" type="button" data-prompt-pack-import ${readonly ? 'disabled' : ''}><i data-lucide="package-open"></i><span>导入</span></button>
+                    <button class="asset-btn" type="button" data-prompt-pack-export-all ${(lib?.items || []).length ? '' : 'disabled'} title="导出当前提示词库，不修改任何分组"><i data-lucide="package"></i><span>打包导出</span></button>
                     <button class="asset-btn primary" type="button" data-prompt-new ${readonly ? 'disabled' : ''}><i data-lucide="file-plus-2"></i><span>新增</span></button>
                     <button class="asset-btn ${promptManageMode ? 'primary' : ''}" type="button" data-prompt-manage><i data-lucide="list-checks"></i><span>${promptManageMode ? '完成管理' : '批量管理'}</span></button>
                 </div>
@@ -2105,6 +2123,7 @@ function renderPromptManager(){
                 <div class="asset-tools">
                     <button class="asset-btn" type="button" data-prompt-select-all ${items.length && !readonly ? '' : 'disabled'}><i data-lucide="check-square"></i><span>全选</span></button>
                     <button class="asset-btn" type="button" data-prompt-clear-selection ${selectedPromptIds.size ? '' : 'disabled'}><i data-lucide="square"></i><span>清空</span></button>
+                    <button class="asset-btn" type="button" data-prompt-pack-export-selected ${selectedPromptIds.size ? '' : 'disabled'}><i data-lucide="download"></i><span>导出所选</span></button>
                     <button class="asset-btn danger ${pendingBatchDelete === 'prompt' ? 'detail-confirm' : ''}" type="button" data-prompt-delete-selected ${readonly || !selectedPromptIds.size ? 'disabled' : ''}><i data-lucide="trash-2"></i><span>${pendingBatchDelete === 'prompt' ? '确认删除' : '删除所选'}</span></button>
                 </div>
             </div>
@@ -2113,7 +2132,62 @@ function renderPromptManager(){
             </div>
         </section>
         ${renderPromptModal(detail, readonly)}
+        ${renderPromptPackModal()}
     `;
+}
+function renderPromptPackModal(){
+    if(!promptPackState) return '';
+    const preview = promptPackState.preview || {};
+    const cats = activePromptCategories();
+    const requiresFallback = Boolean(preview.requires_fallback);
+    const canImport = !promptPackState.loading && !promptPackState.error && Number(preview.importable || 0) > 0 && !requiresFallback;
+    const mappings = Array.isArray(preview.mappings) ? preview.mappings : [];
+    return `<div class="prompt-modal prompt-pack-modal" data-prompt-pack-backdrop>
+        <section class="asset-panel prompt-modal-card prompt-pack-card" role="dialog" aria-modal="true" aria-label="导入提示词包">
+            <div class="panel-head">
+                <div class="panel-title"><strong>导入提示词包</strong><span>${escapeHtml(promptPackState.filename || 'JSON 提示词包')}</span></div>
+                <div class="panel-actions">
+                    <button class="asset-btn primary" type="button" data-prompt-pack-confirm ${canImport ? '' : 'disabled'}><i data-lucide="package-check"></i><span>确认导入 ${Number(preview.importable || 0)} 条</span></button>
+                    <button class="asset-icon-btn" type="button" data-prompt-pack-close title="关闭"><i data-lucide="x"></i></button>
+                </div>
+            </div>
+            <div class="detail-scroll prompt-pack-body">
+                <div class="prompt-pack-safety"><i data-lucide="shield-check"></i><div><strong>分组保护已启用</strong><span>导入只会向“${escapeHtml(activePromptLibrary()?.name || '当前提示词库')}”新增提示词，不会创建、删除、重命名或重排左侧任何大分组和小分组。</span></div></div>
+                ${promptPackState.loading ? '<div class="prompt-pack-loading"><i data-lucide="loader-2"></i><span>正在检查提示词包…</span></div>' : ''}
+                ${promptPackState.error ? `<div class="prompt-pack-error">${escapeHtml(promptPackState.error)}</div>` : ''}
+                ${!promptPackState.loading && !promptPackState.error ? `
+                    <div class="prompt-pack-stats">
+                        <div><strong>${Number(preview.total || 0)}</strong><span>包内总数</span></div>
+                        <div class="ok"><strong>${Number(preview.importable || 0)}</strong><span>可导入</span></div>
+                        <div><strong>${Number(preview.duplicates || 0)}</strong><span>重复跳过</span></div>
+                        <div class="${Number(preview.invalid || 0) ? 'warn' : ''}"><strong>${Number(preview.invalid || 0)}</strong><span>无效条目</span></div>
+                    </div>
+                    <div class="prompt-pack-options">
+                        <label class="inline-edit-field"><span>无法匹配来源分组时</span>
+                            <select id="promptPackFallback" ${cats.length ? '' : 'disabled'}>
+                                <option value="">请选择现有分组</option>
+                                ${cats.map(cat => `<option value="${escapeAttr(cat.id)}" ${cat.id === promptPackState.fallbackCategory ? 'selected' : ''}>${escapeHtml(cat.name || cat.id)}</option>`).join('')}
+                            </select>
+                        </label>
+                        <label class="inline-edit-field"><span>重复提示词</span>
+                            <select id="promptPackDuplicatePolicy">
+                                <option value="skip" ${promptPackState.duplicatePolicy !== 'copy' ? 'selected' : ''}>跳过重复（推荐）</option>
+                                <option value="copy" ${promptPackState.duplicatePolicy === 'copy' ? 'selected' : ''}>仍然导入副本</option>
+                            </select>
+                        </label>
+                    </div>
+                    ${requiresFallback ? `<div class="prompt-pack-warning"><i data-lucide="triangle-alert"></i><span>有 ${Number(preview.unmatched || 0)} 条提示词的来源分组在当前库中不存在。请选择一个现有分组作为兜底后再导入。</span></div>` : ''}
+                    <section class="prompt-pack-mapping">
+                        <div class="prompt-pack-section-title"><strong>分组映射预览</strong><span>仅映射提示词归属，不修改分组树</span></div>
+                        <div class="prompt-pack-map-list">
+                            ${mappings.length ? mappings.map(item => `<div class="prompt-pack-map-row"><span>${escapeHtml(item.source || '未分组')}</span><i data-lucide="arrow-right"></i><strong class="${item.target_name ? '' : 'missing'}">${escapeHtml(item.target_name || '等待选择兜底分组')}</strong></div>`).join('') : '<div class="prompt-pack-map-empty">提示词包没有可识别的分组信息，将使用所选兜底分组。</div>'}
+                        </div>
+                    </section>
+                    ${Array.isArray(preview.errors) && preview.errors.length ? `<div class="prompt-pack-errors"><strong>无效条目原因</strong>${preview.errors.map(error => `<span>${escapeHtml(error)}</span>`).join('')}</div>` : ''}
+                ` : ''}
+            </div>
+        </section>
+    </div>`;
 }
 function renderPromptModal(item, readonly){
     if(!promptCreateMode && !item) return '';
@@ -2257,6 +2331,7 @@ function renderPromptDetail(item, readonly){
         <div class="panel-head">
             <div class="panel-title"><strong>提示词预览</strong><span>${escapeHtml(promptCategoryLabel(item.category || 'custom'))}</span></div>
             <div class="panel-actions">
+                <button class="asset-icon-btn" type="button" data-prompt-pack-export-one="${escapeAttr(item.id)}" title="导出这条提示词"><i data-lucide="download"></i></button>
                 <button class="asset-icon-btn" type="button" data-prompt-edit-start="${escapeAttr(item.id)}" ${readonly ? 'disabled' : ''} title="编辑"><i data-lucide="pencil"></i></button>
                 <button class="asset-icon-btn danger ${pendingDeletePromptId === item.id ? 'detail-confirm' : ''}" type="button" data-prompt-delete="${escapeAttr(item.id)}" ${readonly ? 'disabled' : ''} title="${pendingDeletePromptId === item.id ? '再次点击确认删除' : '删除'}"><i data-lucide="trash-2"></i></button>
                 <button class="asset-icon-btn" type="button" data-prompt-modal-close title="关闭"><i data-lucide="x"></i></button>
@@ -3412,6 +3487,15 @@ async function handleClick(event){
     if(target.closest?.('[data-prompt-edit-cancel]')){ promptEditMode = false; promptCreateMode = false; render(); return; }
     const promptEditStart = target.closest?.('[data-prompt-edit-start]');
     if(promptEditStart){ selectedPromptId = promptEditStart.dataset.promptEditStart || selectedPromptId; promptEditMode = true; promptCreateMode = false; pendingDeletePromptId = ''; render(); return; }
+    if(target.closest?.('[data-prompt-pack-close]')){ promptPackState = null; render(); return; }
+    const promptPackBackdrop = target.closest?.('[data-prompt-pack-backdrop]');
+    if(promptPackBackdrop && target === promptPackBackdrop){ promptPackState = null; render(); return; }
+    if(target.closest?.('[data-prompt-pack-import]')){ promptPackInput?.click(); return; }
+    if(target.closest?.('[data-prompt-pack-export-all]')){ await exportPromptPack([]); return; }
+    if(target.closest?.('[data-prompt-pack-export-selected]')){ await exportPromptPack([...selectedPromptIds]); return; }
+    const promptPackExportOne = target.closest?.('[data-prompt-pack-export-one]');
+    if(promptPackExportOne){ await exportPromptPack([promptPackExportOne.dataset.promptPackExportOne || '']); return; }
+    if(target.closest?.('[data-prompt-pack-confirm]')){ await confirmPromptPackImport(); return; }
     if(target.closest?.('[data-prompt-manage]')){
         promptManageMode = !promptManageMode;
         pendingBatchDelete = '';
@@ -4091,6 +4175,88 @@ function openLocalItem(id){
     const url = localObjectUrl(item);
     if(url) window.open(url, '_blank', 'noopener');
 }
+function promptPackFilename(count){
+    const safe = String(activePromptLibrary()?.name || '提示词库').replace(/[\\/:*?"<>|]+/g, '_').trim() || '提示词库';
+    return `${safe}-${Number(count || 0)}条提示词.jinni-prompts.json`;
+}
+async function exportPromptPack(ids=[]){
+    const lib = activePromptLibrary();
+    if(!lib) return;
+    const selectedIds = [...new Set((ids || []).filter(Boolean))];
+    const exportCount = selectedIds.length || (lib.items || []).length;
+    setStatus(`正在打包 ${exportCount} 条提示词…`);
+    const response = await fetch('/api/prompt-libraries/items/export', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({library_id:lib.id, ids:selectedIds}),
+    });
+    const error = response.ok ? null : await response.json().catch(() => ({}));
+    if(!response.ok){
+        if(response.status === 405) throw new Error('导出接口尚未加载，请重启项目服务后再试');
+        throw new Error(error?.detail || `导出提示词失败（HTTP ${response.status}）`);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = promptPackFilename(selectedIds.length || (lib.items || []).length);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus(`已打包导出 ${exportCount} 条提示词`);
+}
+async function refreshPromptPackPreview(){
+    if(!promptPackState?.package) return;
+    const state = promptPackState;
+    state.loading = true;
+    state.error = '';
+    render();
+    try {
+        const data = await apiJson('/api/prompt-libraries/items/import', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({library_id:activePromptLibrary()?.id || '', package:state.package, fallback_category:state.fallbackCategory || '', duplicate_policy:state.duplicatePolicy || 'skip', dry_run:true}),
+        });
+        if(promptPackState === state) state.preview = data.preview || {};
+    } catch(err) {
+        if(promptPackState === state) state.error = err.message || '无法读取提示词包';
+    } finally {
+        if(promptPackState === state){ state.loading = false; render(); }
+    }
+}
+async function openPromptPack(file){
+    if(!file) return;
+    if(file.size > 10 * 1024 * 1024) throw new Error('提示词包不能超过 10MB');
+    let packageData;
+    try { packageData = JSON.parse(await file.text()); }
+    catch(_) { throw new Error('文件不是有效的 JSON 提示词包'); }
+    promptPackState = {filename:file.name || '提示词包.json', package:packageData, fallbackCategory:activePromptCategory !== 'all' ? activePromptCategory : '', duplicatePolicy:'skip', preview:{}, loading:false, error:''};
+    resetPromptModalState();
+    await refreshPromptPackPreview();
+}
+async function confirmPromptPackImport(){
+    const state = promptPackState;
+    if(!state?.package || state.loading) return;
+    state.loading = true;
+    state.error = '';
+    render();
+    try {
+        const data = await apiJson('/api/prompt-libraries/items/import', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({library_id:activePromptLibrary()?.id || '', package:state.package, fallback_category:state.fallbackCategory || '', duplicate_policy:state.duplicatePolicy || 'skip', dry_run:false}),
+        });
+        promptLibrary = data.library || promptLibrary;
+        promptPackState = null;
+        selectedPromptId = '';
+        selectedPromptIds.clear();
+        promptManageMode = false;
+        render();
+        const result = data.result || {};
+        setStatus(`已导入 ${Number(result.imported || 0)} 条，跳过重复 ${Number(result.duplicates || 0)} 条；分组结构保持不变`);
+    } catch(err) {
+        if(promptPackState === state){ state.error = err.message || '导入失败'; state.loading = false; render(); }
+    }
+}
 async function createPromptLibrary(){
     const name = window.prompt('提示词库名称', '新提示词库');
     if(!String(name || '').trim()) return;
@@ -4313,12 +4479,18 @@ root.addEventListener('pointerdown', event => {
     render();
 }, true);
 root.addEventListener('click', event => {
-    handleClick(event).catch(err => setStatus(err.message || '操作失败'));
+    handleClick(event).catch(err => setStatus(err.message || '操作失败', 'error'));
 });
 document.addEventListener('click', event => {
     if(event.target.closest?.('.asset-lightbox') && !event.target.closest?.('.asset-lightbox-image,.asset-lightbox-video')) closeDetailPreview();
 });
 document.addEventListener('keydown', event => {
+    if(event.key === 'Escape' && promptPackState){
+        event.preventDefault();
+        promptPackState = null;
+        render();
+        return;
+    }
     if(event.key === 'Escape' && activeTab === 'prompts' && (promptCreateMode || promptEditMode || selectedPromptId)){
         event.preventDefault();
         closePromptModal();
@@ -4379,6 +4551,16 @@ root.addEventListener('input', event => {
     }
 });
 root.addEventListener('change', event => {
+    if(event.target?.id === 'promptPackFallback' && promptPackState){
+        promptPackState.fallbackCategory = event.target.value || '';
+        refreshPromptPackPreview().catch(err => { if(promptPackState){ promptPackState.error = err.message || '预览失败'; promptPackState.loading = false; render(); } });
+        return;
+    }
+    if(event.target?.id === 'promptPackDuplicatePolicy' && promptPackState){
+        promptPackState.duplicatePolicy = event.target.value === 'copy' ? 'copy' : 'skip';
+        refreshPromptPackPreview().catch(err => { if(promptPackState){ promptPackState.error = err.message || '预览失败'; promptPackState.loading = false; render(); } });
+        return;
+    }
     const inlineLocalUploadName = event.target.closest?.('[data-localup-inline-name]');
     if(inlineLocalUploadName){
         saveLocalUploadInlineName(inlineLocalUploadName.dataset.localupInlineName || '', inlineLocalUploadName.value || '').catch(err => setStatus(err.message || '保存失败'));
@@ -4456,6 +4638,12 @@ uploadInput?.addEventListener('change', event => {
         else uploadFiles(files).catch(err => setStatus(err.message || '上传失败'));
     }
     event.target.value = '';
+});
+promptPackInput?.addEventListener('change', event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if(!file) return;
+    openPromptPack(file).catch(err => { promptPackState = null; render(); setStatus(err.message || '导入提示词包失败'); });
 });
 document.querySelectorAll('[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => {

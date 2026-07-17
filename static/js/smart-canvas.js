@@ -2176,8 +2176,29 @@ function toggleZoomPreview(){
     if(zoomPreviewState) exitZoomPreview();
     else enterZoomPreview();
 }
+function providerReadyForSmartCanvasSelection(provider){
+    if(!provider || provider.enabled === false) return false;
+    const id = String(provider.id || '').trim().toLowerCase();
+    const protocol = String(provider.protocol || '').trim().toLowerCase();
+    if(id === 'modelscope') return provider.has_key === true;
+    if(id === 'runninghub' || protocol === 'runninghub') return provider.has_key === true || provider.has_wallet_key === true;
+    return true;
+}
+function refreshSmartEngineProviderVisibility(){
+    const availability = {
+        modelscope:Boolean(modelscopeProvider()),
+        runninghub:Boolean(runningHubProvider())
+    };
+    Object.entries(availability).forEach(([engine, available]) => {
+        const option = engineSelect?.querySelector(`option[value="${engine}"]`);
+        if(option) option.hidden = !available;
+    });
+    if((settings.engine === 'modelscope' && !availability.modelscope) || (settings.engine === 'runninghub' && !availability.runninghub)){
+        settings.engine = 'api';
+    }
+}
 function imageProviders(){
-    return (apiProviders || []).filter(p => p.enabled !== false && p.id !== 'modelscope' && p.id !== 'volcengine' && (p.image_models || []).length);
+    return (apiProviders || []).filter(p => providerReadyForSmartCanvasSelection(p) && p.id !== 'modelscope' && p.id !== 'volcengine' && (p.image_models || []).length);
 }
 function volcengineProvider(){
     return (apiProviders || []).find(p => p.id === 'volcengine' && p.enabled !== false) || {
@@ -2189,7 +2210,7 @@ function volcengineProvider(){
     };
 }
 function runningHubProvider(){
-    return (apiProviders || []).find(p => p.id === 'runninghub' && p.enabled !== false) || null;
+    return (apiProviders || []).find(p => p.id === 'runninghub' && providerReadyForSmartCanvasSelection(p)) || null;
 }
 function runningHubEntries(kind){
     const provider = runningHubProvider();
@@ -2281,7 +2302,7 @@ function sortRunningHubFields(fields){
     });
 }
 function chatApiProviders(){
-    return (apiProviders || []).filter(p => p.enabled !== false && (p.chat_models || []).length);
+    return (apiProviders || []).filter(p => providerReadyForSmartCanvasSelection(p) && (p.chat_models || []).length);
 }
 function resolveChatProviderId(providerId=''){
     const providers = chatApiProviders();
@@ -2454,14 +2475,14 @@ function sanitizeSmartApiSelection(target=settings){
     return target;
 }
 function modelscopeProvider(){
-    return (apiProviders || []).find(p => p.id === 'modelscope' && p.enabled !== false) || null;
+    return (apiProviders || []).find(p => p.id === 'modelscope' && providerReadyForSmartCanvasSelection(p)) || null;
 }
 function modelscopeImageModels(){
     return modelscopeProvider()?.image_models || ['Tongyi-MAI/Z-Image-Turbo'];
 }
 const DEFAULT_VIDEO_MODELS = ['veo3-fast','veo3','sora','runway','kling','pika','minimax-video','wan-v2','seedance-1.0-pro','jimeng-vide-3.0','jimeng-video-3.0-pro'];
 function videoApiProviders(){
-    const fromConfig = (apiProviders || []).filter(p => p.enabled !== false && p.id !== 'volcengine' && (p.video_models || []).length);
+    const fromConfig = (apiProviders || []).filter(p => providerReadyForSmartCanvasSelection(p) && p.id !== 'volcengine' && (p.video_models || []).length);
     if(fromConfig.length) return fromConfig;
     return [{id:'comfly', name:'Comfly', video_models:DEFAULT_VIDEO_MODELS, enabled:true}];
 }
@@ -4094,6 +4115,7 @@ async function loadConfig(){
     try {
         const cfg = await fetch('/api/config').then(r => r.json());
         apiProviders = Array.isArray(cfg.api_providers) ? cfg.api_providers : [];
+        refreshSmartEngineProviderVisibility();
         comfyInstanceCount = Math.max(1, (Array.isArray(cfg.comfy_instances) ? cfg.comfy_instances : []).filter(Boolean).length || 1);
         // 提供商配置已就绪即先渲染参数面板，避免等工作流/RunningHub 预取完成后参数才「突然刷新出来」。
         sanitizeSmartApiSelection(settings);

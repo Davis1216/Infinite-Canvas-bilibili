@@ -37,6 +37,25 @@ class ChatExperienceTests(unittest.TestCase):
         self.assertFalse(defaults["modelscope"]["enabled"])
         self.assertFalse(defaults["runninghub"]["enabled"])
 
+    def test_unconfigured_builtin_providers_are_excluded_from_model_selection(self):
+        self.assertFalse(main.provider_available_for_model_selection({
+            "id": "modelscope", "enabled": True, "has_key": False,
+        }))
+        self.assertTrue(main.provider_available_for_model_selection({
+            "id": "modelscope", "enabled": True, "has_key": True,
+        }))
+        self.assertFalse(main.provider_available_for_model_selection({
+            "id": "runninghub", "protocol": "runninghub", "enabled": True,
+            "has_key": False, "has_wallet_key": False,
+        }))
+        self.assertTrue(main.provider_available_for_model_selection({
+            "id": "runninghub", "protocol": "runninghub", "enabled": True,
+            "has_key": False, "has_wallet_key": True,
+        }))
+        self.assertTrue(main.provider_available_for_model_selection({
+            "id": "custom", "protocol": "openai", "enabled": True,
+        }))
+
     def test_image_welcome_action_keeps_agent_model_switching_available(self):
         page_path = os.path.join(main.STATIC_DIR, "gpt-chat.html")
         with open(page_path, "r", encoding="utf-8") as handle:

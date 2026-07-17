@@ -19,7 +19,7 @@
     <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/touch-mouse.js?v=2026.07.4.2.1783154122"></script>
-    <script src="/static/js/i18n.js?v=2026.07.4.2.1784029505"></script>
+    <script src="/static/js/i18n.js?v=2026.07.4.2.1784104411"></script>
     <link rel="stylesheet" href="/static/css/smart-canvas.css?v=2026.07.4.2.1783154122">
 </head>
 <body>
@@ -32,9 +32,9 @@
                             <select id="engineSelect" class="engine-select">
                                 <option value="api" data-i18n="smart.engineApi">API生成</option>
                                 <option value="volcengine" data-i18n="smart.engineVolcengine">火山引擎</option>
-                                <option value="modelscope" data-i18n="smart.engineMs">MS生成</option>
+                                <option value="modelscope" data-i18n="smart.engineMs" hidden>MS生成</option>
                                 <option value="comfy" data-i18n="smart.engineComfy">ComfyUI生成</option>
-                                <option value="runninghub" data-i18n="smart.engineRh">RunningHub</option>
+                                <option value="runninghub" data-i18n="smart.engineRh" hidden>RunningHub</option>
                             </select>
                             <div id="apiKindToggle" class="kind-toggle" style="display:none">
                                 <button type="button" data-kind="image" class="active"><i data-lucide="image"></i><span data-i18n="smart.kindImage">图片</span></button>
@@ -438,6 +438,6 @@
         <div id="toast" class="toast"></div>
         <div id="mentionPreview" class="mention-preview"><img alt="preview"></div>
     </div>
-    <script src="/static/js/smart-canvas.js?v=2026.07.4.2.1784029488"></script>
+    <script src="/static/js/smart-canvas.js?v=2026.07.4.2.1784275784"></script>
 </body>
 </html>

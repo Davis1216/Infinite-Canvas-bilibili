@@ -286,6 +286,7 @@ CONVERSATION_LOCK = Lock()
 JINNI_LOCK = Lock()
 CHAT_RUN_LOCK = Lock()
 CANVAS_LOCK = Lock()
+PROMPT_LIBRARY_LOCK = Lock()
 LOAD_LOCK = Lock()
 RUNNINGHUB_WORKFLOW_LOCK = Lock()
 INSPIRATION_SPACE_LOCK = Lock()
@@ -1277,6 +1278,18 @@ def public_provider(provider):
 
 def public_api_providers():
     return [public_provider(p) for p in load_api_providers()]
+
+def provider_available_for_model_selection(provider):
+    """只有已启用且具备必要凭据的内置平台才能进入模型选择器。"""
+    if not provider or provider.get("enabled") is False:
+        return False
+    provider_id = str(provider.get("id") or "").strip().lower()
+    protocol = str(provider.get("protocol") or "").strip().lower()
+    if provider_id == "modelscope":
+        return provider.get("has_key") is True
+    if provider_id == "runninghub" or protocol == "runninghub":
+        return provider.get("has_key") is True or provider.get("has_wallet_key") is True
+    return True
 
 def get_primary_provider_id(providers=None):
     """返回当前首选 provider 的 id；优先 primary=True 的，否则取第一个非 modelscope 的，再次取第一个。"""
@@ -2839,6 +2852,17 @@ class PromptLibraryBatchMoveRequest(BaseModel):
     ids: List[str] = []
     library_id: str = ""
     category: str = ""
+
+class PromptLibraryExportRequest(BaseModel):
+    library_id: str = ""
+    ids: List[str] = Field(default_factory=list)
+
+class PromptLibraryImportRequest(BaseModel):
+    library_id: str = ""
+    package: Any = None
+    fallback_category: str = ""
+    duplicate_policy: str = "skip"
+    dry_run: bool = True
 
 class PromptLibraryCategoryRequest(BaseModel):
     name: str = "新分组"
@@ -8159,6 +8183,27 @@ def save_prompt_libraries(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
     return data
 
+def save_prompt_libraries_atomic(data):
+    """批量导入专用的原子保存，写入失败时保留原提示词库文件。"""
+    data = normalize_prompt_libraries(data)
+    data["updated_at"] = now_ms()
+    directory = os.path.dirname(PROMPT_LIBRARY_PATH) or DATA_DIR
+    os.makedirs(directory, exist_ok=True)
+    temporary_path = os.path.join(directory, f".{os.path.basename(PROMPT_LIBRARY_PATH)}.{uuid.uuid4().hex}.tmp")
+    try:
+        with open(temporary_path, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, PROMPT_LIBRARY_PATH)
+    finally:
+        if os.path.exists(temporary_path):
+            try:
+                os.remove(temporary_path)
+            except OSError:
+                pass
+    return data
+
 def public_prompt_libraries(data=None):
     data = normalize_prompt_libraries(data or load_prompt_libraries())
     return {
@@ -8173,6 +8218,134 @@ def find_prompt_library(data, library_id=""):
     libraries = data.get("libraries") if isinstance(data.get("libraries"), list) else []
     library_id = str(library_id or data.get("active_library_id") or "").strip()
     return next((item for item in libraries if item.get("id") == library_id), None) or (libraries[0] if libraries else None)
+
+PROMPT_PACK_FORMAT = "jinni.prompt-pack"
+PROMPT_PACK_VERSION = 1
+PROMPT_PACK_MAX_ITEMS = 5000
+
+def prompt_item_fingerprint(item):
+    if not isinstance(item, dict):
+        return ""
+    fields = [item.get("name"), item.get("positive") or item.get("text"), item.get("negative"), item.get("scene")]
+    normalized = "\n".join(re.sub(r"\s+", " ", str(value or "")).strip().casefold() for value in fields)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized.strip() else ""
+
+def build_prompt_pack(library, ids=None):
+    ids = {str(item) for item in (ids or []) if str(item)}
+    categories = [dict(item) for item in (library.get("categories") or []) if isinstance(item, dict) and item.get("id")]
+    category_names = {str(item.get("id")): str(item.get("name") or item.get("id")) for item in categories}
+    prompts = []
+    for item in (library.get("items") or []):
+        if not isinstance(item, dict) or (ids and str(item.get("id")) not in ids):
+            continue
+        category_id = str(item.get("category") or "")
+        prompts.append({
+            "name": str(item.get("name") or "提示词"),
+            "scene": str(item.get("scene") or ""),
+            "positive": str(item.get("positive") or ""),
+            "negative": str(item.get("negative") or ""),
+            "params": item.get("params") if isinstance(item.get("params"), dict) else {},
+            "category": {"id": category_id, "name": category_names.get(category_id, category_id)},
+        })
+    return {
+        "format": PROMPT_PACK_FORMAT,
+        "version": PROMPT_PACK_VERSION,
+        "exported_at": now_ms(),
+        "source": {"library_id": str(library.get("id") or ""), "library_name": str(library.get("name") or "提示词库")},
+        "categories": categories,
+        "prompts": prompts,
+    }
+
+def normalize_prompt_pack(raw):
+    if isinstance(raw, list):
+        prompts = raw
+        package = {"format": PROMPT_PACK_FORMAT, "version": 1, "prompts": prompts, "categories": []}
+    elif isinstance(raw, dict):
+        package = raw
+        prompts = raw.get("prompts") if isinstance(raw.get("prompts"), list) else raw.get("items")
+        if not isinstance(prompts, list) and any(key in raw for key in ("positive", "text", "prompt")):
+            prompts = [raw]
+    else:
+        raise HTTPException(status_code=400, detail="提示词包必须是 JSON 对象或数组")
+    if not isinstance(prompts, list):
+        raise HTTPException(status_code=400, detail="提示词包缺少 prompts 数组")
+    if len(prompts) > PROMPT_PACK_MAX_ITEMS:
+        raise HTTPException(status_code=400, detail=f"单次最多导入 {PROMPT_PACK_MAX_ITEMS} 条提示词")
+    result = []
+    for index, raw_item in enumerate(prompts):
+        if not isinstance(raw_item, dict):
+            result.append({"index": index, "invalid": f"第 {index + 1} 条：条目不是对象"})
+            continue
+        category = raw_item.get("category")
+        if isinstance(category, dict):
+            category_id = str(category.get("id") or "").strip()
+            category_name = str(category.get("name") or "").strip()
+        else:
+            category_id = str(category or raw_item.get("category_id") or "").strip()
+            category_name = str(raw_item.get("category_name") or "").strip()
+        positive = str(raw_item.get("positive") or raw_item.get("text") or raw_item.get("prompt") or "").strip()
+        if not positive:
+            result.append({"index": index, "invalid": f"第 {index + 1} 条：正向提示词为空"})
+            continue
+        result.append({
+            "index": index,
+            "name": sanitize_asset_name(raw_item.get("name") or f"导入提示词 {index + 1}", "提示词"),
+            "scene": str(raw_item.get("scene") or raw_item.get("description") or "").strip()[:500],
+            "positive": positive,
+            "negative": str(raw_item.get("negative") or raw_item.get("negative_prompt") or "").strip(),
+            "params": raw_item.get("params") if isinstance(raw_item.get("params"), dict) else {},
+            "source_category_id": category_id,
+            "source_category_name": category_name,
+        })
+    return package, result
+
+def preview_prompt_pack_import(library, raw_package, fallback_category="", duplicate_policy="skip"):
+    _package, prompts = normalize_prompt_pack(raw_package)
+    categories = [item for item in (library.get("categories") or []) if isinstance(item, dict) and item.get("id")]
+    valid_ids = {str(item.get("id")): item for item in categories}
+    names = {}
+    for item in categories:
+        names.setdefault(str(item.get("name") or "").strip().casefold(), str(item.get("id")))
+    fallback = normalize_prompt_category_id(fallback_category) if fallback_category else ""
+    if fallback and fallback not in valid_ids:
+        raise HTTPException(status_code=400, detail="兜底分组不存在")
+    existing = {prompt_item_fingerprint(item) for item in (library.get("items") or []) if isinstance(item, dict)}
+    seen_in_pack = set()
+    ready, invalid, duplicates, unmatched = [], [], [], []
+    mappings = {}
+    for item in prompts:
+        if item.get("invalid"):
+            invalid.append(item)
+            continue
+        source_id = normalize_prompt_category_id(item.get("source_category_id")) if item.get("source_category_id") else ""
+        source_name = str(item.get("source_category_name") or "").strip()
+        target = source_id if source_id in valid_ids else names.get(source_name.casefold(), "")
+        if not target:
+            target = fallback
+        source_label = source_name or source_id or "未分组"
+        mappings[source_label] = {"source": source_label, "target_id": target, "target_name": str(valid_ids.get(target, {}).get("name") or "")}
+        if not target:
+            unmatched.append(item)
+            continue
+        candidate = {**item, "category": target}
+        fingerprint = prompt_item_fingerprint(candidate)
+        if duplicate_policy == "skip" and fingerprint and (fingerprint in existing or fingerprint in seen_in_pack):
+            duplicates.append(item)
+            continue
+        if fingerprint:
+            seen_in_pack.add(fingerprint)
+        ready.append(candidate)
+    return {
+        "total": len(prompts),
+        "importable": len(ready),
+        "duplicates": len(duplicates),
+        "invalid": len(invalid),
+        "unmatched": len(unmatched),
+        "requires_fallback": bool(unmatched),
+        "mappings": list(mappings.values()),
+        "items": ready,
+        "errors": [str(item.get("invalid")) for item in invalid[:20]],
+    }
 
 def sanitize_asset_name(name, fallback="asset"):
     name = re.sub(r'[\\/:*?"<>|]+', "_", str(name or fallback)).strip()
@@ -13164,7 +13337,7 @@ async def jimeng_query_media(payload: JimengQueryMediaRequest):
 @app.get("/api/config")
 async def ai_config():
     preferred_chat_model = next((m for m in CHAT_MODELS if m == "gpt-5.5"), CHAT_MODELS[0] if CHAT_MODELS else CHAT_MODEL)
-    providers = public_api_providers()
+    providers = [provider for provider in public_api_providers() if provider_available_for_model_selection(provider)]
     return {
         "base_url": AI_BASE_URL,
         "chat_model": preferred_chat_model,
@@ -16076,6 +16249,72 @@ async def batch_move_prompt_library_items(payload: PromptLibraryBatchMoveRequest
     data["active_library_id"] = library.get("id") or data.get("active_library_id")
     data = save_prompt_libraries(data)
     return {"library": public_prompt_libraries(data), "moved": moved, "category": category}
+
+@app.post("/api/prompt-libraries/items/export")
+async def export_prompt_library_items(payload: PromptLibraryExportRequest):
+    data = load_prompt_libraries()
+    library = find_prompt_library(data, payload.library_id)
+    if not library or (payload.library_id and library.get("id") != payload.library_id):
+        raise HTTPException(status_code=404, detail="提示词库不存在")
+    package = build_prompt_pack(library, payload.ids)
+    if payload.ids and not package.get("prompts"):
+        raise HTTPException(status_code=404, detail="未找到要导出的提示词")
+    filename = sanitize_asset_name(f"{library.get('name') or '提示词库'}-{len(package.get('prompts') or [])}条提示词", "提示词包") + ".jinni-prompts.json"
+    content = json.dumps(package, ensure_ascii=False, indent=2).encode("utf-8")
+    encoded = urllib.parse.quote(filename)
+    return Response(
+        content=content,
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"},
+    )
+
+@app.post("/api/prompt-libraries/items/import")
+async def import_prompt_library_items(payload: PromptLibraryImportRequest):
+    if str(payload.duplicate_policy or "skip").lower() not in {"skip", "copy"}:
+        raise HTTPException(status_code=400, detail="不支持的重复处理方式")
+    duplicate_policy = str(payload.duplicate_policy or "skip").lower()
+    with PROMPT_LIBRARY_LOCK:
+        data = load_prompt_libraries()
+        library = find_prompt_library(data, payload.library_id)
+        if not library or (payload.library_id and library.get("id") != payload.library_id):
+            raise HTTPException(status_code=404, detail="提示词库不存在")
+        preview = preview_prompt_pack_import(library, payload.package, payload.fallback_category, duplicate_policy)
+        public_preview = {key: value for key, value in preview.items() if key != "items"}
+        if payload.dry_run:
+            return {"preview": public_preview}
+        if preview.get("requires_fallback"):
+            raise HTTPException(status_code=400, detail="存在无法映射的来源分组，请选择一个现有分组作为兜底")
+        before_structure = [
+            (str(lib.get("id")), str(lib.get("name")), [(str(cat.get("id")), str(cat.get("name"))) for cat in (lib.get("categories") or []) if isinstance(cat, dict)])
+            for lib in (data.get("libraries") or []) if isinstance(lib, dict)
+        ]
+        created_at = now_ms()
+        imported = []
+        for source in preview.get("items") or []:
+            item = normalize_prompt_library_item({
+                "id": f"tpl_{uuid.uuid4().hex[:12]}",
+                "name": source.get("name"),
+                "category": source.get("category"),
+                "scene": source.get("scene"),
+                "positive": source.get("positive"),
+                "negative": source.get("negative"),
+                "params": source.get("params"),
+                "created_at": created_at,
+                "updated_at": created_at,
+            })
+            imported.append(item)
+        if imported:
+            library.setdefault("items", [])[0:0] = imported
+        candidate = normalize_prompt_libraries(data)
+        candidate_structure = [
+            (str(lib.get("id")), str(lib.get("name")), [(str(cat.get("id")), str(cat.get("name"))) for cat in (lib.get("categories") or []) if isinstance(cat, dict)])
+            for lib in (candidate.get("libraries") or []) if isinstance(lib, dict)
+        ]
+        if candidate_structure != before_structure:
+            raise HTTPException(status_code=500, detail="导入已中止：检测到分组结构发生变化")
+        saved = save_prompt_libraries_atomic(candidate) if imported else data
+        public_preview["imported"] = len(imported)
+        return {"library": public_prompt_libraries(saved), "result": public_preview}
 
 PROMPT_BUILTIN_CATEGORY_IDS = {"view", "storyboard", "character", "product", "lighting", "custom"}
 

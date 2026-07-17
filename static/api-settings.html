@@ -21,7 +21,7 @@
     <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/i18n.js?v=2026.07.4.2.1784104411"></script>
     <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
-    <link rel="stylesheet" href="/static/css/api-settings.css?v=2026.07.4.2.1783154122">
+    <link rel="stylesheet" href="/static/css/api-settings.css?v=2026.07.4.2.1784275157">
 </head>
 <body>
     <div class="page">
@@ -39,16 +39,6 @@
                     <div class="side-section-title" data-i18n="api.providersTitle">平台列表</div>
                     <div id="providerList" class="provider-list"></div>
                     <button class="add-btn" type="button" onclick="addProvider()"><i data-lucide="plus" class="w-4 h-4"></i><span data-i18n="api.addProvider">新增平台</span></button>
-                    <button class="api-link-btn" type="button" onclick="openRecommendApi()"><i data-lucide="sparkles" class="w-4 h-4"></i><span data-i18n="api.recommendApi">推荐API</span></button>
-                    <div class="cli-quick-group">
-                        <div class="side-section-title" data-i18n="api.cliSettings">CLI 设置</div>
-                        <div class="cli-quick-list">
-                            <button class="cli-quick-btn" type="button" onclick="addCliProvider('jimeng')"><i data-lucide="image" class="w-3.5 h-3.5"></i><span>即梦 CLI</span></button>
-                            <button class="cli-quick-btn" type="button" onclick="addCliProvider('codex')"><i data-lucide="terminal" class="w-3.5 h-3.5"></i><span>GPT CLI</span></button>
-                            <button class="cli-quick-btn" type="button" onclick="addCliProvider('gemini-cli')"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i><span>Antigravity CLI</span></button>
-                            <div class="cli-quick-note">需要先安装 CLI文件夹中的依赖。</div>
-                        </div>
-                    </div>
                 </aside>
 
                 <main id="settingsContent" class="content">
@@ -268,10 +258,6 @@
                                         <option value="apimart" data-i18n="api.protocolApimart">异步协议</option>
                                         <option value="gemini" data-i18n="api.protocolGemini">Gemini 协议</option>
                                         <option value="volcengine">方舟/Ark 任务协议</option>
-                                        <option value="runninghub">RunningHub OpenAPI</option>
-                                        <option value="jimeng">即梦 CLI</option>
-                                        <option value="codex">OpenAI Codex CLI</option>
-                                        <option value="gemini-cli">Antigravity CLI</option>
                                     </select>
                                 </div>
                                 <div class="field-frame image-request-mode-wrap">
@@ -384,34 +370,11 @@
                         </section>
                 </div>
             </main>
-                <main id="recommendContent" class="content recommend-content" hidden>
-                    <div class="content-head">
-                        <div>
-                            <div class="editor-title" data-i18n="api.recommendPanelTitle">推荐平台</div>
-                            <div class="editor-sub" data-i18n="api.recommendPanelSub">获取 Key 后保存，右侧会切换到刚保存的平台配置。</div>
-                        </div>
-                    </div>
-                    <section id="recommendPanel" class="provider-onboarding-card recommend-inline-card"></section>
-                </main>
         </div>
         </div>
     </div>
 
     <!-- 模型选择浮层 -->
-    <div id="recommendApiOverlay" class="picker-overlay">
-        <div class="picker-modal">
-            <div class="picker-head">
-                <div>
-                    <div class="picker-title" data-i18n="api.recommendApi">推荐API</div>
-                    <div class="picker-count" data-i18n="api.recommendApiDesc">选择平台后可以一键填写请求地址和协议。</div>
-                </div>
-                <div class="picker-close" onclick="closeRecommendApi()"><i data-lucide="x" class="w-4 h-4"></i></div>
-            </div>
-            <div id="recommendApiList" class="recommend-api-body"></div>
-            <div class="recommend-note" data-i18n="api.recommendApiNote">提示：账户内需要至少 0.05 元余额，才能验证地址并拉取模型。</div>
-        </div>
-    </div>
-
     <div id="modelPickerOverlay" class="picker-overlay">
         <div class="picker-modal">
             <div class="picker-head">
@@ -566,6 +529,6 @@
         </div>
     </div>
 
-    <script src="/static/js/api-settings.js?v=2026.07.4.2.1784208257"></script>
+    <script src="/static/js/api-settings.js?v=2026.07.4.2.1784275157"></script>
 </body>
 </html>
