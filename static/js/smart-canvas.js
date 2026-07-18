@@ -1182,12 +1182,35 @@ function applyTheme(theme){
     document.body?.classList.toggle('theme-dark', dark);
     document.body?.classList.toggle('studio-theme-dark', dark);
 }
-function toast(text){
+function inferToastTone(text){
+    const value = String(text || '');
+    if(/失败|错误|异常|无法|未能|超时|拒绝|failed|error|invalid/i.test(value)) return 'error';
+    if(/完成|成功|已保存|已添加|已生成|已上传|已复制|已粘贴|success|complete|done/i.test(value)) return 'success';
+    if(/请|需要|未找到|排队|等待|注意|warn/i.test(value)) return 'warn';
+    return 'info';
+}
+function toast(text, tone='auto'){
     const el = document.getElementById('toast');
-    el.textContent = text;
+    if(!el) return;
+    const resolvedTone = tone === 'auto' ? inferToastTone(text) : tone;
+    const icons = {success:'✓', error:'!', warn:'!', info:'i'};
+    el.className = `toast ${resolvedTone}`;
+    el.replaceChildren();
+    const content = document.createElement('div');
+    content.className = 'toast-content';
+    const icon = document.createElement('span');
+    icon.className = 'toast-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = icons[resolvedTone] || icons.info;
+    const copy = document.createElement('span');
+    copy.className = 'toast-copy';
+    copy.textContent = String(text || '');
+    content.append(icon, copy);
+    el.appendChild(content);
+    el.setAttribute('role', resolvedTone === 'error' ? 'alert' : 'status');
     el.classList.add('show');
     clearTimeout(toast._timer);
-    toast._timer = setTimeout(() => el.classList.remove('show'), 1800);
+    toast._timer = setTimeout(() => el.classList.remove('show'), resolvedTone === 'error' ? 4800 : 3200);
 }
 let generationCompleteSoundAt = 0;
 function playGenerationCompleteSound(){
@@ -6813,7 +6836,10 @@ function addSmartGenerationLog({run, outputs=[], runMs=0, error=''}) {
             name:item.name || item.filename || ''
         });
     }).filter(item => item?.url);
-    if(!error && outputItems.length) playGenerationCompleteSound();
+    if(!error && outputItems.length) {
+        playGenerationCompleteSound();
+        toast(`任务完成 · ${formatRunDuration(runMs)}`, 'success');
+    }
     const entry = {
         id:uid('log'),
         createdAt:Date.now(),

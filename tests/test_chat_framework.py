@@ -252,7 +252,12 @@ class ChatFrameworkTests(unittest.TestCase):
 
         patched = self.client.patch(
             f"/api/conversations/{conversation['id']}", headers=self.headers,
-            json={"runtime_provider_id": "test-override", "runtime_model": "override-model"},
+            json={
+                "runtime_provider_id": "test-override",
+                "runtime_model": "override-model",
+                "runtime_image_provider_id": "image-override",
+                "runtime_image_model": "override-image-model",
+            },
         )
         self.assertEqual(patched.status_code, 200)
         stored = patched.json()["conversation"]
@@ -261,6 +266,8 @@ class ChatFrameworkTests(unittest.TestCase):
         self.assertEqual(request.mode, "chat")
         self.assertEqual(request.provider, "test-override")
         self.assertEqual(request.model, "override-model")
+        self.assertEqual(request.image_provider, "image-override")
+        self.assertEqual(request.image_model, "override-image-model")
         self.assertIn("品牌主色是深海蓝", request.system_prompt)
         self.assertEqual(main.enforce_jinni_agent_action(stored, "generate_image"), "chat")
         self.assertEqual(main.enforce_jinni_agent_action(stored, "edit_image"), "chat")

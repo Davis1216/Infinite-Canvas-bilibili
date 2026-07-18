@@ -63,6 +63,55 @@
         @media (max-width:640px){ .size-row{ grid-template-columns:1fr; } }
         .masonry-item { aspect-ratio:1/1; border-radius:24px; overflow:hidden; background:#fff; border:1px solid #f1f5f9; transition:all .5s var(--easing); }
         .masonry-item:hover { transform:translateY(-6px); box-shadow:0 20px 40px rgba(0,0,0,.08); }
+        .result-frame { transition:border-color .28s var(--easing),box-shadow .28s var(--easing),background .28s var(--easing); }
+        .result-frame.state-running { border-color:#bfdbfe; box-shadow:0 24px 70px rgba(37,99,235,.10),inset 0 0 0 1px rgba(59,130,246,.06); }
+        .result-frame.state-success { border-color:#a7f3d0; box-shadow:0 24px 70px rgba(16,185,129,.11),inset 0 0 0 1px rgba(16,185,129,.06); }
+        .result-frame.state-error { border-color:#fecaca; box-shadow:0 24px 70px rgba(239,68,68,.10),inset 0 0 0 1px rgba(239,68,68,.06); }
+        .generation-stage { width:min(430px,calc(100% - 48px)); display:flex; flex-direction:column; align-items:center; color:#0f172a; }
+        .generation-visual { position:relative; width:92px; height:92px; display:grid; place-items:center; }
+        .generation-ring { position:absolute; inset:0; border:1px solid rgba(59,130,246,.15); border-radius:50%; }
+        .generation-ring::before { content:""; position:absolute; inset:-1px; border:2px solid transparent; border-top-color:#2563eb; border-right-color:rgba(37,99,235,.28); border-radius:inherit; animation:onlineOrbit 1.35s linear infinite; }
+        .generation-ring.secondary { inset:12px; border-color:rgba(59,130,246,.10); }
+        .generation-ring.secondary::before { border-top-color:#60a5fa; border-right-color:transparent; animation-duration:1.9s; animation-direction:reverse; }
+        .generation-core { width:48px; height:48px; display:grid; place-items:center; border-radius:16px; background:linear-gradient(145deg,#eff6ff,#dbeafe); color:#1d4ed8; box-shadow:0 12px 28px rgba(37,99,235,.16); animation:onlineCorePulse 1.8s ease-in-out infinite; }
+        .generation-core svg { width:21px; height:21px; }
+        .generation-kicker { margin-top:22px; color:#2563eb; font-size:9px; font-weight:950; letter-spacing:.22em; text-transform:uppercase; }
+        .generation-title { margin-top:7px; font-size:17px; font-weight:950; letter-spacing:-.025em; }
+        .generation-detail { margin-top:6px; color:#64748b; font-size:11px; font-weight:700; text-align:center; }
+        .generation-progress-track { width:100%; height:3px; margin-top:22px; overflow:hidden; border-radius:999px; background:#e2e8f0; }
+        .generation-progress-track::after { content:""; display:block; width:42%; height:100%; border-radius:inherit; background:linear-gradient(90deg,transparent,#2563eb,transparent); animation:onlineProgress 1.65s ease-in-out infinite; }
+        .generation-steps { width:100%; margin-top:18px; display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+        .generation-step { min-width:0; display:flex; align-items:center; justify-content:center; gap:6px; color:#94a3b8; font-size:9px; font-weight:850; transition:.2s var(--easing); }
+        .generation-step-dot { width:7px; height:7px; flex:0 0 7px; border-radius:50%; background:#cbd5e1; box-shadow:0 0 0 0 rgba(37,99,235,0); }
+        .generation-step.active { color:#1d4ed8; }
+        .generation-step.active .generation-step-dot { background:#2563eb; animation:onlineSignal 1.4s ease-out infinite; }
+        .generation-step.done { color:#059669; }
+        .generation-step.done .generation-step-dot { background:#10b981; }
+        .generation-timer { position:absolute; top:22px; right:82px; z-index:8; height:34px; padding:0 12px; display:flex; align-items:center; gap:7px; border:1px solid #bfdbfe; border-radius:999px; background:rgba(239,246,255,.94); color:#1d4ed8; font-size:11px; font-weight:950; font-variant-numeric:tabular-nums; box-shadow:0 9px 24px rgba(37,99,235,.12); backdrop-filter:blur(12px); }
+        .generation-timer svg { width:14px; height:14px; }
+        .generation-timer.success { border-color:#a7f3d0; background:rgba(236,253,245,.95); color:#047857; }
+        .generation-timer.error { border-color:#fecaca; background:rgba(254,242,242,.95); color:#b91c1c; }
+        .result-status { width:min(420px,calc(100% - 48px)); padding:28px; display:flex; flex-direction:column; align-items:center; border:1px solid #e2e8f0; border-radius:24px; background:rgba(255,255,255,.92); text-align:center; box-shadow:0 18px 48px rgba(15,23,42,.08); }
+        .result-status-icon { width:50px; height:50px; display:grid; place-items:center; border-radius:16px; }
+        .result-status.error .result-status-icon { background:#fef2f2; color:#dc2626; }
+        .result-status.success .result-status-icon { background:#ecfdf5; color:#059669; }
+        .result-status h3 { margin:14px 0 0; font-size:16px; font-weight:950; }
+        .result-status p { max-width:340px; margin:7px 0 0; color:#64748b; font-size:11px; line-height:1.6; font-weight:700; }
+        .result-status button { margin-top:16px; height:36px; padding:0 16px; border-radius:12px; background:#111827; color:#fff; font-size:10px; font-weight:900; }
+        .online-toast-stack { position:fixed; top:22px; right:22px; z-index:100; width:min(360px,calc(100vw - 32px)); display:flex; flex-direction:column; gap:9px; pointer-events:none; }
+        .online-toast { padding:13px 14px; display:grid; grid-template-columns:32px minmax(0,1fr); align-items:center; gap:10px; border:1px solid #e2e8f0; border-radius:16px; background:rgba(255,255,255,.96); box-shadow:0 18px 48px rgba(15,23,42,.14); animation:onlineToastIn .24s var(--easing); backdrop-filter:blur(16px); }
+        .online-toast-icon { width:32px; height:32px; display:grid; place-items:center; border-radius:11px; }
+        .online-toast.success { border-color:#a7f3d0; } .online-toast.success .online-toast-icon { background:#ecfdf5; color:#059669; }
+        .online-toast.error { border-color:#fecaca; } .online-toast.error .online-toast-icon { background:#fef2f2; color:#dc2626; }
+        .online-toast.info .online-toast-icon { background:#eff6ff; color:#2563eb; }
+        .online-toast strong { display:block; color:#0f172a; font-size:11px; font-weight:950; }
+        .online-toast span { display:block; margin-top:2px; color:#64748b; font-size:10px; font-weight:700; line-height:1.45; }
+        @keyframes onlineOrbit { to { transform:rotate(360deg); } }
+        @keyframes onlineCorePulse { 50% { transform:scale(1.06); box-shadow:0 16px 34px rgba(37,99,235,.23); } }
+        @keyframes onlineProgress { from { transform:translateX(-120%); } to { transform:translateX(340%); } }
+        @keyframes onlineSignal { 70%,100% { box-shadow:0 0 0 7px rgba(37,99,235,0); } 0% { box-shadow:0 0 0 0 rgba(37,99,235,.38); } }
+        @keyframes onlineToastIn { from { opacity:0; transform:translateY(-8px) scale(.98); } to { opacity:1; transform:none; } }
+        @media (prefers-reduced-motion:reduce){ .generation-ring,.generation-core,.generation-progress-track::after,.generation-step.active .generation-step-dot,.online-toast { animation:none !important; } }
         .gallery-lightbox { background:rgba(255,255,255,.99); backdrop-filter:blur(22px) saturate(1.05); }
         .prompt-library-btn { height:28px; padding:0 10px; border:1px solid #e5e7eb; border-radius:999px; background:#fff; color:#64748b; display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; transition:all .2s var(--easing); }
         .prompt-library-btn:hover { color:#111827; border-color:#111827; transform:translateY(-1px); }
@@ -101,6 +150,15 @@
             backdrop-filter: blur(22px) saturate(1.05) !important;
             -webkit-backdrop-filter: blur(22px) saturate(1.05) !important;
         }
+        html.studio-theme-dark .generation-stage,body.studio-theme-dark .generation-stage { color:#f1f5f9; }
+        html.studio-theme-dark .generation-detail,body.studio-theme-dark .generation-detail { color:#94a3b8; }
+        html.studio-theme-dark .generation-progress-track,body.studio-theme-dark .generation-progress-track { background:#273244; }
+        html.studio-theme-dark .generation-core,body.studio-theme-dark .generation-core { background:linear-gradient(145deg,#172554,#1e3a8a); color:#bfdbfe; }
+        html.studio-theme-dark .generation-timer,body.studio-theme-dark .generation-timer { background:rgba(23,37,84,.9); border-color:#1d4ed8; color:#bfdbfe; }
+        html.studio-theme-dark .generation-timer.success,body.studio-theme-dark .generation-timer.success { background:rgba(6,78,59,.88); border-color:#059669; color:#a7f3d0; }
+        html.studio-theme-dark .generation-timer.error,body.studio-theme-dark .generation-timer.error { background:rgba(127,29,29,.88); border-color:#dc2626; color:#fecaca; }
+        html.studio-theme-dark .result-status,body.studio-theme-dark .result-status,html.studio-theme-dark .online-toast,body.studio-theme-dark .online-toast { background:rgba(20,27,39,.96); border-color:#334155; }
+        html.studio-theme-dark .result-status h3,body.studio-theme-dark .result-status h3,html.studio-theme-dark .online-toast strong,body.studio-theme-dark .online-toast strong { color:#f1f5f9; }
     </style>
 </head>
 <body>
@@ -221,7 +279,25 @@
             <div class="lg:col-span-7">
                 <div id="resultBox" class="result-frame min-h-[500px] lg:h-full flex items-center justify-center relative overflow-hidden">
                     <div id="placeholder" class="text-center space-y-4 opacity-20"><i data-lucide="layout" class="w-12 h-12 mx-auto stroke-[1px]"></i><p class="text-[10px] font-black tracking-[0.5em] uppercase" data-i18n="online.canvasReady">Canvas Ready</p></div>
-                    <div id="loader" class="hidden text-center space-y-4"><div class="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto"></div><p class="text-[10px] font-black tracking-[0.5em] uppercase" data-i18n="online.generating">Generating</p></div>
+                    <div id="loader" class="hidden generation-stage" role="status" aria-live="polite">
+                        <div class="generation-visual"><span class="generation-ring"></span><span class="generation-ring secondary"></span><span class="generation-core"><i data-lucide="sparkles"></i></span></div>
+                        <div id="generationKicker" class="generation-kicker">任务正在运行</div>
+                        <div id="generationTitle" class="generation-title">正在准备生成请求</div>
+                        <div id="generationDetail" class="generation-detail">正在整理提示词、参考图与模型参数</div>
+                        <div class="generation-progress-track" aria-hidden="true"></div>
+                        <div class="generation-steps" aria-label="生成阶段">
+                            <span class="generation-step active" data-generation-step="prepare"><span class="generation-step-dot"></span><span>准备请求</span></span>
+                            <span class="generation-step" data-generation-step="generate"><span class="generation-step-dot"></span><span>模型生成</span></span>
+                            <span class="generation-step" data-generation-step="receive"><span class="generation-step-dot"></span><span>接收结果</span></span>
+                        </div>
+                    </div>
+                    <div id="generationTimer" class="generation-timer hidden" aria-label="本次生成用时"><i data-lucide="timer"></i><span id="generationTimerValue">00:00</span></div>
+                    <div id="resultStatus" class="result-status hidden" role="alert">
+                        <span id="resultStatusIcon" class="result-status-icon"><i data-lucide="circle-alert"></i></span>
+                        <h3 id="resultStatusTitle">生成失败</h3>
+                        <p id="resultStatusMessage"></p>
+                        <button type="button" onclick="submitImage()">重新生成</button>
+                    </div>
                     <img id="outputImg" class="hidden w-full h-full object-contain p-8 cursor-zoom-in" onclick="zoomImage()">
                     <a id="downloadBtn" href="#" download class="hidden absolute top-8 right-8 w-12 h-12 bg-white/90 shadow-2xl rounded-2xl flex items-center justify-center hover:bg-black hover:text-white"><i data-lucide="download" class="w-4 h-4"></i></a>
                 </div>
@@ -234,6 +310,7 @@
             <div id="loadMoreTrigger" class="py-20 text-center text-gray-300 text-[10px] font-bold uppercase tracking-widest cursor-pointer hover:text-black">Load More Archive</div>
         </section>
     </div>
+    <div id="onlineToastStack" class="online-toast-stack" aria-live="polite"></div>
 
     <div id="lightbox" onclick="handleOutsideClick(event)" class="hidden fixed inset-0 z-50 gallery-lightbox flex flex-col items-center justify-center p-8">
         <button onclick="closeLightbox()" class="absolute top-10 right-10 text-gray-400 hover:text-black"><i data-lucide="x" class="w-8 h-8"></i></button>
@@ -356,6 +433,9 @@
         let outputCount = 1;
         let models = {gpt:'gpt-image-2', nano:'nano-banana-pro'};
         let allHistory = [], currentIndex = 0, currentResult = null, currentLightboxData = null, isLoading = false;
+        let generationStartedAt = 0;
+        let generationTimerInterval = null;
+        let generationPhase = 'prepare';
         let promptLibraries = [];
         let promptLibraryLoadedAt = 0;
         let activePromptLibraryId = '';
@@ -963,23 +1043,125 @@
             document.getElementById(`del${index}`).classList.add('hidden');
         }
 
+        function formatGenerationDuration(ms){
+            const total = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+            const minutes = Math.floor(total / 60);
+            const seconds = total % 60;
+            return `${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+        }
+        function generationElapsed(){ return generationStartedAt ? Date.now() - generationStartedAt : 0; }
+        function refreshGenerationTimer(){
+            const value = document.getElementById('generationTimerValue');
+            if(value) value.textContent = formatGenerationDuration(generationElapsed());
+        }
+        function setGenerationPhase(phase){
+            generationPhase = ['prepare','generate','receive'].includes(phase) ? phase : 'generate';
+            const phases = ['prepare','generate','receive'];
+            const index = phases.indexOf(generationPhase);
+            document.querySelectorAll('[data-generation-step]').forEach(step => {
+                const stepIndex = phases.indexOf(step.dataset.generationStep);
+                step.classList.toggle('active', stepIndex === index);
+                step.classList.toggle('done', stepIndex < index);
+            });
+            const copy = {
+                prepare:['正在准备生成请求','正在整理提示词、参考图与模型参数'],
+                generate:['模型正在生成图像','任务仍在运行，可以继续等待或切换到其他页面'],
+                receive:['正在接收生成结果','模型已返回响应，正在加载并校验图像'],
+            }[generationPhase];
+            document.getElementById('generationTitle').textContent = copy[0];
+            document.getElementById('generationDetail').textContent = copy[1];
+        }
+        function setGenerateButtonRunning(running){
+            const btn = document.getElementById('genBtn');
+            btn.disabled = running;
+            btn.innerHTML = running
+                ? '<span class="w-4 h-4 border-2 border-white/35 border-t-white rounded-full animate-spin"></span><span class="tracking-[0.18em] text-[11px] uppercase">任务运行中</span>'
+                : '<i data-lucide="zap" class="w-4 h-4 text-yellow-400"></i><span class="tracking-[0.3em] text-[11px] uppercase" data-i18n="online.generate">生成</span>';
+            lucide.createIcons();
+        }
+        function showOnlineToast(tone,title,message){
+            const stack = document.getElementById('onlineToastStack');
+            if(stack.parentElement !== document.documentElement) document.documentElement.appendChild(stack);
+            const item = document.createElement('div');
+            const icon = tone === 'success' ? 'circle-check' : tone === 'error' ? 'triangle-alert' : 'loader-circle';
+            item.className = `online-toast ${tone || 'info'}`;
+            item.innerHTML = `<span class="online-toast-icon"><i data-lucide="${icon}"></i></span><span><strong>${escapeHtml(title)}</strong><span>${escapeHtml(message || '')}</span></span>`;
+            stack.appendChild(item);
+            lucide.createIcons();
+            setTimeout(() => { item.style.opacity='0'; item.style.transform='translateY(-6px)'; }, tone === 'error' ? 5200 : 3200);
+            setTimeout(() => item.remove(), tone === 'error' ? 5550 : 3550);
+        }
+        function beginGenerationFeedback(){
+            const box = document.getElementById('resultBox');
+            const timer = document.getElementById('generationTimer');
+            const status = document.getElementById('resultStatus');
+            box.classList.remove('state-success','state-error');
+            box.classList.add('state-running');
+            timer.className = 'generation-timer';
+            status.className = 'result-status hidden';
+            generationStartedAt = Date.now();
+            refreshGenerationTimer();
+            clearInterval(generationTimerInterval);
+            generationTimerInterval = setInterval(refreshGenerationTimer, 1000);
+            setGenerationPhase('prepare');
+            setGenerateButtonRunning(true);
+        }
+        function finishGenerationFeedback(tone,message){
+            const elapsed = formatGenerationDuration(generationElapsed());
+            const box = document.getElementById('resultBox');
+            const timer = document.getElementById('generationTimer');
+            clearInterval(generationTimerInterval);
+            generationTimerInterval = null;
+            refreshGenerationTimer();
+            timer.classList.add(tone === 'success' ? 'success' : 'error');
+            box.classList.remove('state-running');
+            box.classList.add(tone === 'success' ? 'state-success' : 'state-error');
+            setGenerateButtonRunning(false);
+            showOnlineToast(tone, tone === 'success' ? '图像生成完成' : '图像生成失败', tone === 'success' ? `本次生成用时 ${elapsed}` : message);
+        }
+        function showGenerationError(message){
+            const status = document.getElementById('resultStatus');
+            document.getElementById('resultStatusTitle').textContent = '生成失败';
+            document.getElementById('resultStatusMessage').textContent = message || '请求未能完成，请检查模型配置后重试。';
+            status.className = 'result-status error';
+            status.querySelector('#resultStatusIcon').innerHTML = '<i data-lucide="circle-alert"></i>';
+            lucide.createIcons();
+        }
+        function waitForGeneratedImage(image,url){
+            return new Promise((resolve,reject) => {
+                image.onload = () => resolve();
+                image.onerror = () => reject(new Error('生成已返回，但图像加载失败，请稍后从历史记录重试。'));
+                image.src = url;
+                if(image.complete && image.naturalWidth) resolve();
+            });
+        }
         async function submitImage(){
             const prompt = document.getElementById('promptInput').value.trim();
-            if(!prompt){ alert(tr('online.promptRequired')); return; }
-            const btn = document.getElementById('genBtn'), loader = document.getElementById('loader'), placeholder = document.getElementById('placeholder'), out = document.getElementById('outputImg'), dl = document.getElementById('downloadBtn');
-            btn.disabled = true; placeholder.classList.add('hidden'); out.classList.add('hidden'); dl.classList.add('hidden'); loader.classList.remove('hidden');
+            if(!prompt){ showOnlineToast('error','缺少提示词',tr('online.promptRequired')); return; }
+            const loader = document.getElementById('loader'), placeholder = document.getElementById('placeholder'), out = document.getElementById('outputImg'), dl = document.getElementById('downloadBtn'), status = document.getElementById('resultStatus');
+            placeholder.classList.add('hidden'); out.classList.add('hidden'); dl.classList.add('hidden'); status.classList.add('hidden'); loader.classList.remove('hidden');
+            beginGenerationFeedback();
             try {
                 const reqBody = { prompt, provider_id:provider, model:selectedModel, size:currentSize(), temperature:normalizedTemperature(temperature), n:outputCount, reference_images:refSlotIds().map(id => refs[id]).filter(Boolean).slice(0, REF_SLOT_COUNT) };
                 if(QUALITY_PROTOCOLS.has(providerProtocol(provider))) reqBody.quality = quality;
-                const result = await fetch('/api/online-image', {
-                    method:'POST', headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify(reqBody)
-                }).then(async r => { if(!r.ok) throw new Error((await r.json()).detail || '生成失败'); return r.json(); });
-                currentResult = result; out.src = result.images[0]; out.classList.remove('hidden'); dl.href = result.images[0]; dl.classList.remove('hidden'); renderImageCard(result, true);
+                setGenerationPhase('generate');
+                const response = await fetch('/api/online-image', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(reqBody)});
+                if(!response.ok){
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || errorData.error || '生成失败');
+                }
+                setGenerationPhase('receive');
+                const result = await response.json();
+                if(!result.images?.[0]) throw new Error('任务已完成，但没有返回可用图像。');
+                currentResult = result;
+                await waitForGeneratedImage(out,result.images[0]);
+                loader.classList.add('hidden'); out.classList.remove('hidden'); dl.href = result.images[0]; dl.classList.remove('hidden'); renderImageCard(result, true);
+                finishGenerationFeedback('success','');
             } catch(err) {
-                alert(err.message || 'Generation failed'); placeholder.classList.remove('hidden');
-            } finally {
-                loader.classList.add('hidden'); btn.disabled = false;
+                loader.classList.add('hidden'); out.classList.add('hidden');
+                const message = err.message || 'Generation failed';
+                showGenerationError(message);
+                finishGenerationFeedback('error',message);
             }
         }
 

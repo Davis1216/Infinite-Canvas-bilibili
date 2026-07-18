@@ -20,6 +20,7 @@
     <script src="/static/vendor/js/lucide.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/theme.js?v=2026.07.4.2.1783154122"></script>
     <script src="/static/js/i18n.js?v=2026.07.4.2.1784104411"></script>
+    <script src="/static/js/chat-markdown.js?v=2026.07.4.2.1784358185"></script>
     <link rel="stylesheet" href="/static/css/theme.css?v=2026.07.4.2.1783154122">
     <style>
         @import url('/static/vendor/css/fonts.css?v=2026.07.4.2.1783154122');
@@ -185,7 +186,67 @@
         .bubble.image-bubble { width:max-content; max-width:min(600px,78%); padding:10px; }
         .bubble.image-bubble .bubble-text { max-width:min(560px,100%); margin:0 2px 8px; color:var(--chat-muted); font-size:12px; line-height:1.55; white-space:pre-wrap; }
         .bubble.image-bubble .bubble-text:empty { display:none; }
-        .bubble.assistant.streaming::after { content:""; display:inline-block; width:7px; height:1.2em; margin-left:3px; border-radius:999px; background:var(--chat-text); vertical-align:-.2em; animation:cursorBlink .9s steps(2,end) infinite; }
+        .bubble.assistant.markdown-enabled { white-space:normal; }
+        .chat-markdown { min-width:0; line-height:1.72; overflow-wrap:anywhere; }
+        .chat-markdown > :first-child { margin-top:0 !important; }
+        .chat-markdown > :last-child { margin-bottom:0 !important; }
+        .chat-markdown p { margin:.68em 0; }
+        .chat-markdown h1,.chat-markdown h2,.chat-markdown h3,.chat-markdown h4,.chat-markdown h5,.chat-markdown h6 { margin:1.18em 0 .52em; line-height:1.3; font-weight:850; letter-spacing:-.018em; color:var(--chat-text); }
+        .chat-markdown h1 { font-size:1.55em; padding-bottom:.34em; border-bottom:1px solid var(--chat-line); }
+        .chat-markdown h2 { font-size:1.32em; padding-bottom:.28em; border-bottom:1px solid var(--chat-line); }
+        .chat-markdown h3 { font-size:1.17em; }
+        .chat-markdown h4,.chat-markdown h5,.chat-markdown h6 { font-size:1em; }
+        .chat-markdown ul,.chat-markdown ol { margin:.62em 0; padding-left:1.65em; }
+        .chat-markdown li { margin:.28em 0; padding-left:.15em; }
+        .chat-markdown li::marker { color:var(--chat-muted); font-weight:750; }
+        .chat-markdown .task-list-item { list-style:none; margin-left:-1.4em; display:flex; align-items:flex-start; gap:8px; }
+        .chat-markdown .task-list-item input { margin-top:.42em; accent-color:var(--chat-text); }
+        .chat-markdown blockquote { margin:.78em 0; padding:.12em 0 .12em 14px; border-left:3px solid color-mix(in srgb,var(--chat-text) 28%,transparent); color:var(--chat-muted); }
+        .chat-markdown blockquote p { margin:.4em 0; }
+        .chat-markdown hr { height:1px; margin:1.15em 0; border:0; background:var(--chat-line); }
+        .chat-markdown strong { font-weight:850; color:var(--chat-text); }
+        .chat-markdown del { opacity:.64; }
+        .chat-markdown a { color:#2563eb; text-decoration:none; border-bottom:1px solid color-mix(in srgb,#2563eb 32%,transparent); transition:color .14s var(--ease),border-color .14s var(--ease); }
+        .chat-markdown a:hover { color:#1d4ed8; border-color:currentColor; }
+        .chat-markdown code { padding:.12em .38em; border:1px solid var(--chat-line); border-radius:6px; background:var(--chat-soft); font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace; font-size:.9em; }
+        .chat-code-block { margin:.82em 0; overflow:hidden; border:1px solid var(--chat-line); border-radius:12px; background:#101723; color:#e5edf8; box-shadow:0 8px 28px rgba(15,23,42,.08); }
+        .chat-code-head { min-height:34px; padding:0 10px 0 13px; display:flex; align-items:center; justify-content:space-between; gap:12px; background:#182232; color:#9fb0c8; font:700 10px/1.2 "SFMono-Regular",Consolas,monospace; letter-spacing:.05em; }
+        .chat-code-copy { padding:5px 8px; border-radius:7px; color:#cbd8e9; background:transparent; transition:background .14s var(--ease),color .14s var(--ease); }
+        .chat-code-copy:hover { color:white; background:rgba(255,255,255,.09); }
+        .chat-code-block pre { margin:0; max-height:520px; padding:14px; overflow:auto; white-space:pre; tab-size:4; }
+        .chat-code-block pre code { padding:0; border:0; border-radius:0; color:inherit; background:transparent; font-size:12px; line-height:1.65; }
+        .chat-table-scroll { max-width:100%; margin:.82em 0; overflow:auto; border:1px solid var(--chat-line); border-radius:11px; }
+        .chat-markdown table { width:100%; min-width:420px; border-collapse:collapse; font-size:.94em; }
+        .chat-markdown th,.chat-markdown td { padding:9px 11px; border-right:1px solid var(--chat-line); border-bottom:1px solid var(--chat-line); vertical-align:top; }
+        .chat-markdown th:last-child,.chat-markdown td:last-child { border-right:0; }
+        .chat-markdown tr:last-child td { border-bottom:0; }
+        .chat-markdown th { background:var(--chat-soft); font-weight:800; color:var(--chat-text); }
+        .chat-markdown img { display:block; max-width:100%; max-height:520px; margin:.78em auto; border-radius:12px; border:1px solid var(--chat-line); object-fit:contain; }
+        .generation-placeholder { min-width:min(460px,68vw); padding:3px 1px; white-space:normal; }
+        .generation-shell { position:relative; display:flex; align-items:center; gap:14px; overflow:hidden; }
+        .generation-orbit { position:relative; width:38px; height:38px; flex:0 0 38px; display:grid; place-items:center; border:1px solid var(--chat-line); border-radius:13px; background:linear-gradient(145deg,var(--chat-panel),var(--chat-soft)); box-shadow:0 6px 20px rgba(15,23,42,.06); }
+        .generation-orbit::before { content:""; width:18px; height:18px; border-radius:50%; border:2px solid color-mix(in srgb,var(--chat-muted) 24%,transparent); border-top-color:var(--chat-text); animation:generationOrbit 1.15s linear infinite; }
+        .generation-orbit::after { content:""; position:absolute; width:5px; height:5px; border-radius:50%; background:var(--chat-text); box-shadow:0 0 12px color-mix(in srgb,var(--chat-text) 46%,transparent); animation:generationPulse 1.3s ease-in-out infinite; }
+        .generation-copy { min-width:0; display:flex; flex-direction:column; gap:3px; }
+        .generation-copy strong { font-size:13px; line-height:1.35; letter-spacing:-.01em; }
+        .generation-copy span { color:var(--chat-muted); font-size:11px; line-height:1.45; }
+        .generation-progress { height:2px; margin-top:12px; overflow:hidden; border-radius:999px; background:color-mix(in srgb,var(--chat-muted) 13%,transparent); }
+        .generation-progress::after { content:""; display:block; width:38%; height:100%; border-radius:inherit; background:linear-gradient(90deg,transparent,var(--chat-text),transparent); animation:generationFlow 1.55s ease-in-out infinite; }
+        .generation-live { margin-top:9px; display:flex; align-items:center; gap:7px; color:var(--chat-muted); font-size:10px; font-weight:750; letter-spacing:.025em; white-space:normal; }
+        .generation-live-dot { width:6px; height:6px; border-radius:50%; background:#4f8cff; box-shadow:0 0 0 0 rgba(79,140,255,.35); animation:generationSignal 1.55s ease-out infinite; }
+        .generation-elapsed { margin-left:auto; min-width:48px; height:24px; padding:0 8px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--chat-line); border-radius:999px; background:var(--chat-soft); color:var(--chat-muted); font-size:10px; font-weight:900; font-variant-numeric:tabular-nums; }
+        .chat-status-toast { position:fixed; top:22px; right:22px; z-index:10020; width:min(340px,calc(100vw - 32px)); padding:13px 14px; display:grid; grid-template-columns:34px minmax(0,1fr); align-items:center; gap:10px; border:1px solid var(--chat-line-2); border-radius:16px; background:rgba(248,250,252,.97); box-shadow:0 18px 48px rgba(15,23,42,.16); backdrop-filter:blur(16px); opacity:0; transform:translateY(-8px) scale(.98); pointer-events:none; transition:.2s var(--ease); }
+        .chat-status-toast.show { opacity:1; transform:none; }
+        .chat-status-toast.success { border-color:#a7f3d0; } .chat-status-toast.error { border-color:#fecaca; }
+        .chat-status-toast-icon { width:34px; height:34px; display:grid; place-items:center; border-radius:11px; background:#eff6ff; color:#2563eb; }
+        .chat-status-toast.success .chat-status-toast-icon { background:#ecfdf5; color:#059669; }
+        .chat-status-toast.error .chat-status-toast-icon { background:#fef2f2; color:#dc2626; }
+        .chat-status-toast strong { display:block; color:var(--chat-text); font-size:11px; font-weight:950; }
+        .chat-status-toast span { display:block; margin-top:2px; color:var(--chat-muted); font-size:10px; font-weight:700; }
+        @keyframes generationOrbit { to { transform:rotate(360deg); } }
+        @keyframes generationPulse { 0%,100% { opacity:.46; transform:scale(.8); } 50% { opacity:1; transform:scale(1.15); } }
+        @keyframes generationFlow { from { transform:translateX(-120%); } to { transform:translateX(360%); } }
+        @keyframes generationSignal { 0% { box-shadow:0 0 0 0 rgba(79,140,255,.42); } 75%,100% { box-shadow:0 0 0 7px rgba(79,140,255,0); } }
         @keyframes messageIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
         .bubble-row { animation:messageIn .2s var(--ease); }
         .generated-grid { display:grid; gap:8px; }
@@ -404,6 +465,10 @@
         body.studio-theme-dark .model-picker-popover,
         html.theme-dark body .model-picker-popover,
         body.theme-dark .model-picker-popover { background:rgba(23,29,41,.96) !important; border-color:var(--chat-line) !important; box-shadow:0 22px 54px rgba(0,0,0,.36) !important; color:var(--chat-text) !important; }
+        html.studio-theme-dark body .chat-status-toast,
+        body.studio-theme-dark .chat-status-toast,
+        html.theme-dark body .chat-status-toast,
+        body.theme-dark .chat-status-toast { background:rgba(23,29,41,.97) !important; box-shadow:0 20px 52px rgba(0,0,0,.38) !important; }
         html.studio-theme-dark body .model-picker-head,
         body.studio-theme-dark .model-picker-head,
         html.theme-dark body .model-picker-head,
@@ -953,6 +1018,7 @@
             <div id="knowledgeCitationBody" class="knowledge-citation-body"><div class="knowledge-citation-loading">正在读取真实索引片段…</div></div>
         </section>
     </div>
+    <div id="chatStatusToast" class="chat-status-toast" role="status" aria-live="polite"><span class="chat-status-toast-icon"><i data-lucide="circle-check"></i></span><span><strong id="chatStatusToastTitle"></strong><span id="chatStatusToastDetail"></span></span></div>
 
     <script>
         lucide.createIcons();
@@ -994,6 +1060,7 @@
         window.addEventListener('message', event => {
             if(event.data?.type === 'studio-lang') applyLanguage(event.data.lang);
             if(event.data?.type === 'brainstorm-new-chat') newConversation({fromNavigation:true});
+            if(event.data?.type === 'studio-chat-markdown') setMarkdownRendering(event.data.enabled !== false);
             if(event.data?.type === 'studio-display-name') {
                 displayName = String(event.data.value || '').trim().slice(0,40);
                 if(!currentConversation && !pendingJinni) renderMessages([]);
@@ -1015,11 +1082,21 @@
 
         const USER_KEY = 'gpt_chat_browser_user';
         const CHAT_SETTINGS_KEY = 'gpt_chat_settings_v1';
+        const CHAT_MARKDOWN_KEY = 'studio_chat_markdown_enabled';
         const CHAT_LAST_CONVERSATION_KEY = 'gpt_chat_last_conversation_v1';
         const CHAT_ATTACHMENT_MAX = 20;
         const CHAT_SIZE_MODE_VERSION = 2;
         const userId = localStorage.getItem(USER_KEY) || uuid();
         localStorage.setItem(USER_KEY, userId);
+        let markdownRenderingEnabled = localStorage.getItem(CHAT_MARKDOWN_KEY) !== '0';
+
+        function setMarkdownRendering(enabled){
+            markdownRenderingEnabled=enabled!==false;
+            localStorage.setItem(CHAT_MARKDOWN_KEY,markdownRenderingEnabled?'1':'0');
+            lastRenderedRunSignature='';
+            if(currentConversation) renderCurrentRunState();
+            else renderMessages([]);
+        }
 
         function readChatSettings(){
             try {
@@ -1043,6 +1120,8 @@
         let conversationSearch = '';
         let conversationSearchTimer = null;
         let runPollTimer = null;
+        let chatRunElapsedTimer = null;
+        let chatStatusToastTimer = null;
         let lastRenderedRunSignature = '';
         let mode = 'agent';
         let provider = savedChatSettings.provider || 'comfly';
@@ -1492,6 +1571,11 @@
                 ordinaryKnowledgeDraft={mode:'none',knowledge_base_ids:[]};
                 provider = selected.provider_id || provider;
                 activeChatModel = selected.chat_model || activeChatModel;
+                activeImageProvider = selected.image_provider_id || activeImageProvider;
+                activeImageModel = selected.image_model || activeImageModel;
+                modelPickerScope = 'chat';
+                mode = selected.capabilities?.generate_image || selected.capabilities?.edit_image ? 'agent' : 'chat';
+                setMode(mode,false);
                 showChatWorkspace();
                 rememberConversation('');
                 setChatTitle(selected.name || 'Jinni');
@@ -1510,8 +1594,9 @@
                 provider = currentConversation.runtime_provider_id || snapshot.provider_id || provider;
                 activeChatModel = currentConversation.runtime_model || snapshot.chat_model || activeChatModel;
                 chatProviderModels[provider] = activeChatModel;
-                activeImageProvider = snapshot.image_provider_id || activeImageProvider;
-                activeImageModel = snapshot.image_model || activeImageModel;
+                activeImageProvider = currentConversation?.runtime_image_provider_id || snapshot.image_provider_id || activeImageProvider;
+                activeImageModel = currentConversation?.runtime_image_model || snapshot.image_model || activeImageModel;
+                if(!jinniModelPickerKinds(snapshot).includes(modelPickerScope)) modelPickerScope = 'chat';
                 mode = snapshot.capabilities?.generate_image || snapshot.capabilities?.edit_image ? 'agent' : 'chat';
             }
             setMode(mode,false);
@@ -1617,10 +1702,13 @@
             updateKnowledgeModeControl();
         }
 
-        async function persistJinniRuntimeModel(){
+        async function persistJinniRuntimeModel(kind='chat'){
             if(!currentConversation?.id || !currentJinniSnapshot()) return;
             try {
-                const response = await fetch(`/api/conversations/${currentConversation.id}`,{method:'PATCH',headers:headers(),body:JSON.stringify({runtime_provider_id:provider,runtime_model:activeChatModel})});
+                const update = kind === 'image'
+                    ? {runtime_image_provider_id:activeImageProvider,runtime_image_model:activeImageModel}
+                    : {runtime_provider_id:provider,runtime_model:activeChatModel};
+                const response = await fetch(`/api/conversations/${currentConversation.id}`,{method:'PATCH',headers:headers(),body:JSON.stringify(update)});
                 const data = await response.json();
                 if(response.ok) currentConversation = data.conversation;
             } catch(e) {}
@@ -1721,8 +1809,14 @@
             return list.find(p => p.id === id) || list[0];
         }
         function activePickerKind(){
-            if(currentJinniSnapshot()) return 'chat';
+            if(currentJinniSnapshot()) return jinniModelPickerKinds().includes(modelPickerScope) ? modelPickerScope : 'chat';
             return mode === 'image' ? 'image' : (mode === 'agent' ? modelPickerScope : 'chat');
+        }
+        function jinniModelPickerKinds(snapshot=currentJinniSnapshot()){
+            const kinds = ['chat'];
+            const capabilities = isObject(snapshot?.capabilities) ? snapshot.capabilities : {};
+            if(capabilities.generate_image || capabilities.edit_image) kinds.push('image');
+            return kinds;
         }
         function currentProviderId(kind=activePickerKind()){
             return kind === 'image' ? activeImageProvider : provider;
@@ -1814,7 +1908,7 @@
             renderProviderControls();
             updateModelLabel();
             if(!currentJinniSnapshot()) saveChatSettings();
-            if(kind === 'chat') persistJinniRuntimeModel();
+            persistJinniRuntimeModel(kind);
         }
         function setActiveModel(model, kind=activePickerKind()){
             if(kind === 'image') activeImageModel = model;
@@ -1826,7 +1920,7 @@
             renderProviderControls();
             updateModelLabel();
             if(!currentJinniSnapshot()) saveChatSettings();
-            if(kind === 'chat') persistJinniRuntimeModel();
+            persistJinniRuntimeModel(kind);
         }
 
         function toggleModelPicker(force){
@@ -1858,14 +1952,21 @@
             const rect = btn.getBoundingClientRect();
             const viewportW = (window.visualViewport?.width || window.innerWidth);
             const viewportH = (window.visualViewport?.height || window.innerHeight);
+            const scaleValue = Number(getComputedStyle(document.documentElement).getPropertyValue('--studio-ui-scale'));
+            const pageScale = document.documentElement.classList.contains('studio-ui-scaled') && Number.isFinite(scaleValue) && scaleValue > 0 ? scaleValue : 1;
+            const pageLeft = window.visualViewport?.pageLeft ?? window.scrollX ?? 0;
+            const pageTop = window.visualViewport?.pageTop ?? window.scrollY ?? 0;
+            const toBodyX = value => (value + pageLeft) / pageScale;
+            const toBodyY = value => (value + pageTop) / pageScale;
             const width = Math.min(380, Math.max(300, viewportW - 32));
-            const estimatedHeight = Math.min(390, Math.max(260, viewportH * .62));
+            const renderedWidth = width * pageScale;
             const availableAbove = Math.max(180, rect.top - 14);
-            const maxHeight = Math.min(390, availableAbove, viewportH - 32);
-            const left = Math.min(Math.max(16, rect.left), Math.max(16, viewportW - width - 16));
-            const top = Math.max(12, rect.top - maxHeight - 10);
-            pop.style.setProperty('--model-picker-left', `${Math.round(left)}px`);
-            pop.style.setProperty('--model-picker-top', `${Math.round(Math.max(16, top))}px`);
+            const maxHeight = Math.min(390, availableAbove / pageScale, (viewportH - 32) / pageScale);
+            const renderedMaxHeight = maxHeight * pageScale;
+            const left = Math.min(Math.max(16, rect.left), Math.max(16, viewportW - renderedWidth - 16));
+            const top = Math.max(12, rect.top - renderedMaxHeight - 10);
+            pop.style.setProperty('--model-picker-left', `${Math.round(toBodyX(left))}px`);
+            pop.style.setProperty('--model-picker-top', `${Math.round(toBodyY(top))}px`);
             pop.style.setProperty('--model-picker-width', `${Math.round(width)}px`);
             pop.style.setProperty('--model-picker-max-height', `${Math.round(maxHeight)}px`);
             requestAnimationFrame(() => {
@@ -1873,8 +1974,8 @@
                 const nextLeft = box.right > viewportW - 12 ? (left - (box.right - viewportW + 12)) : left;
                 const overlap = box.bottom - (rect.top - 8);
                 const nextTop = overlap > 0 ? (top - overlap - 2) : top;
-                pop.style.setProperty('--model-picker-left', `${Math.round(Math.max(12, nextLeft))}px`);
-                pop.style.setProperty('--model-picker-top', `${Math.round(Math.max(12, nextTop))}px`);
+                pop.style.setProperty('--model-picker-left', `${Math.round(toBodyX(Math.max(12, nextLeft)))}px`);
+                pop.style.setProperty('--model-picker-top', `${Math.round(toBodyY(Math.max(12, nextTop)))}px`);
             });
         }
         function toggleResolutionPicker(force){
@@ -1939,10 +2040,12 @@
         }
 
         function setModelPickerScope(kind){
-            modelPickerScope = kind === 'image' ? 'image' : 'chat';
+            const next = kind === 'image' ? 'image' : 'chat';
+            if(currentJinniSnapshot() && !jinniModelPickerKinds().includes(next)) return;
+            modelPickerScope = next;
             renderProviderControls();
             updateModelLabel();
-            saveChatSettings();
+            if(!currentJinniSnapshot()) saveChatSettings();
         }
 
         function renderModelPicker(){
@@ -1959,17 +2062,16 @@
             const currentMdl = currentModel(kind);
             providerLabel.textContent = providerNameById(currentPid, kind);
             if(currentJinniSnapshot()) {
-                modelLabel.textContent = shortModelName(activeChatModel);
+                modelLabel.textContent = shortModelName(currentMdl);
             } else if(mode === 'agent') {
                 modelLabel.textContent = `${shortModelName(activeChatModel)} + ${shortModelName(activeImageModel)}`;
             } else {
                 modelLabel.textContent = shortModelName(currentMdl);
             }
             title.textContent = currentJinniSnapshot() ? '当前会话模型' : (mode === 'agent' ? '智能助手模型' : (kind === 'image' ? '生图模型' : '对话模型'));
-            scope.innerHTML = mode === 'agent' && !currentJinniSnapshot()
-                ? `<button class="${kind === 'chat' ? 'active' : ''}" onclick="setModelPickerScope('chat')">对话</button><button class="${kind === 'image' ? 'active' : ''}" onclick="setModelPickerScope('image')">图像</button>`
-                : '';
-            scope.style.display = mode === 'agent' && !currentJinniSnapshot() ? 'flex' : 'none';
+            const pickerKinds = currentJinniSnapshot() ? jinniModelPickerKinds() : (mode === 'agent' ? ['chat','image'] : []);
+            scope.innerHTML = pickerKinds.map(item => `<button class="${kind === item ? 'active' : ''}" onclick="setModelPickerScope('${item}')">${item === 'image' ? '图像' : '对话'}</button>`).join('');
+            scope.style.display = pickerKinds.length ? 'flex' : 'none';
             const providers = kind === 'image' ? imageProviders() : chatProviders();
             providerList.innerHTML = providers.length
                 ? providers.map(p => `<button class="model-picker-option ${p.id === currentPid ? 'active' : ''}" onclick="setProvider('${escapeHtml(p.id)}','${kind}')"><span>${escapeHtml(p.name || p.id)}</span>${p.id === currentPid ? '<i data-lucide="check"></i>' : ''}</button>`).join('')
@@ -1993,6 +2095,38 @@
 
         function runStatusClass(status){
             return ['queued','running','failed','cancelled','interrupted'].includes(status) ? status : '';
+        }
+        function formatChatRunDuration(ms){
+            const total=Math.max(0,Math.floor(Number(ms||0)/1000));
+            const minutes=Math.floor(total/60),seconds=total%60;
+            return minutes ? `${minutes}:${String(seconds).padStart(2,'0')}` : `${seconds}s`;
+        }
+        function chatRunDuration(run){
+            const start=Number(run?.started_at||run?.created_at||0);
+            const end=Number(run?.finished_at||Date.now());
+            return start ? Math.max(0,end-start) : 0;
+        }
+        function refreshChatRunElapsed(){
+            const timers=[...document.querySelectorAll('[data-chat-run-start]')];
+            timers.forEach(el=>{
+                const start=Number(el.dataset.chatRunStart||0);
+                if(start) el.textContent=formatChatRunDuration(Date.now()-start);
+            });
+            if(timers.length&&!chatRunElapsedTimer) chatRunElapsedTimer=setInterval(refreshChatRunElapsed,1000);
+            if(!timers.length&&chatRunElapsedTimer){clearInterval(chatRunElapsedTimer);chatRunElapsedTimer=null;}
+        }
+        function showChatStatusToast(tone,title,detail){
+            const toast=document.getElementById('chatStatusToast');
+            const icon=toast?.querySelector('.chat-status-toast-icon');
+            if(!toast||!icon) return;
+            toast.className=`chat-status-toast ${tone||''}`;
+            icon.innerHTML=`<i data-lucide="${tone==='error'?'triangle-alert':tone==='success'?'circle-check':'loader-circle'}"></i>`;
+            document.getElementById('chatStatusToastTitle').textContent=title||'';
+            document.getElementById('chatStatusToastDetail').textContent=detail||'';
+            requestAnimationFrame(()=>toast.classList.add('show'));
+            clearTimeout(chatStatusToastTimer);
+            chatStatusToastTimer=setTimeout(()=>toast.classList.remove('show'),tone==='error'?5000:3200);
+            lucide.createIcons();
         }
 
         function conversationGroup(item){
@@ -2135,8 +2269,13 @@
                 const currentRun = currentConversation ? latestRunForConversation(currentConversation.id) : null;
                 const oldRun = currentRun ? previous.get(currentRun.id) : null;
                 if(currentRun && (!oldRun || oldRun.status !== currentRun.status || oldRun.partial_content !== currentRun.partial_content)) {
-                    if(currentRun.status === 'succeeded') await refreshCurrentConversation();
-                    else renderCurrentRunState();
+                    if(currentRun.status === 'succeeded') {
+                        showChatStatusToast('success','回答已完成',`本次用时 ${formatChatRunDuration(chatRunDuration(currentRun))}`);
+                        await refreshCurrentConversation();
+                    } else {
+                        if(currentRun.status === 'failed' && oldRun?.status !== 'failed') showChatStatusToast('error','任务生成失败',currentRun.error || '可以在失败卡片中查看详情并重试');
+                        renderCurrentRunState();
+                    }
                 }
             } catch(e) {}
             scheduleRunPolling();
@@ -2151,8 +2290,8 @@
             const messages = [...(currentConversation.messages || [])];
             if(run && ['queued','running','failed','cancelled','interrupted'].includes(run.status)) {
                 const retrying=run.status==='running'&&Number(run.next_retry_at||0)>Date.now();
-                const content = run.partial_content || (retrying?`正在重试 ${run.attempt+1}/${run.max_attempts||3}…`:(run.error || runStatusLabel(run.status)));
-                if(content) messages.push({role:'assistant', content, run_status:run.status, run_id:run.id, error_info:run.error_info, attempt:run.attempt, max_attempts:run.max_attempts, provider_id:run.provider_id, model:run.model, finished_at:run.finished_at});
+                const content = run.partial_content || (['failed','cancelled','interrupted'].includes(run.status) ? (run.error || runStatusLabel(run.status)) : '');
+                messages.push({role:'assistant', content, run_status:run.status, run_id:run.id, error_info:run.error_info, attempt:run.attempt, max_attempts:run.max_attempts, provider_id:run.provider_id, model:run.model, created_at:run.created_at, started_at:run.started_at, finished_at:run.finished_at, next_retry_at:run.next_retry_at, retrying});
             }
             renderMessages(messages);
             updateComposerState();
@@ -2568,6 +2707,52 @@
             document.getElementById('knowledgeCitationModal').hidden=true;
         }
 
+        function renderAssistantContent(node,content,citations,bubble){
+            if(markdownRenderingEnabled && window.ChatMarkdown){
+                bubble?.classList.add('markdown-enabled');
+                window.ChatMarkdown.render(node,content,{citations:Array.isArray(citations)?citations:[],onCitation:openKnowledgeCitation});
+            }else{
+                bubble?.classList.remove('markdown-enabled');
+                node.classList.remove('chat-markdown');
+                renderKnowledgeCitationText(node,content,citations);
+            }
+        }
+
+        function generationStateCopy(msg){
+            const max=Number(msg.max_attempts||3);
+            const attempt=Math.max(1,Number(msg.attempt||1));
+            const retrying=Boolean(msg.retrying)||Number(msg.next_retry_at||0)>Date.now();
+            if(retrying) return {title:`正在重新连接 · ${Math.min(attempt+1,max)}/${max}`,detail:'上游响应暂时中断，系统正在安全重试'};
+            if(msg.run_status==='queued') return {title:'正在准备回答',detail:'已整理上下文，等待模型开始处理'};
+            return {title:'正在思考并组织回答',detail:'你可以切换到其他对话，任务会在后台继续'};
+        }
+
+        function renderGenerationPlaceholder(node,msg){
+            node.replaceChildren(); node.classList.add('generation-placeholder');
+            const copy=generationStateCopy(msg);
+            const shell=document.createElement('div'); shell.className='generation-shell';
+            const orbit=document.createElement('div'); orbit.className='generation-orbit'; orbit.setAttribute('aria-hidden','true');
+            const body=document.createElement('div'); body.className='generation-copy';
+            const title=document.createElement('strong'); title.textContent=copy.title;
+            const detail=document.createElement('span'); detail.textContent=copy.detail;
+            const elapsed=document.createElement('span'); elapsed.className='generation-elapsed'; elapsed.dataset.chatRunStart=String(msg.started_at||msg.created_at||Date.now()); elapsed.textContent=formatChatRunDuration(Date.now()-Number(elapsed.dataset.chatRunStart));
+            body.append(title,detail); shell.append(orbit,body,elapsed);
+            const progress=document.createElement('div'); progress.className='generation-progress'; progress.setAttribute('aria-hidden','true');
+            node.append(shell,progress);
+            node.setAttribute('role','status'); node.setAttribute('aria-live','polite');
+            requestAnimationFrame(refreshChatRunElapsed);
+        }
+
+        function appendGenerationLive(bubble,msg){
+            const copy=generationStateCopy(msg);
+            const live=document.createElement('div'); live.className='generation-live'; live.setAttribute('role','status');
+            const dot=document.createElement('span'); dot.className='generation-live-dot'; dot.setAttribute('aria-hidden','true');
+            const label=document.createElement('span'); label.textContent=msg.retrying ? copy.title : '正在继续生成回答';
+            const elapsed=document.createElement('span'); elapsed.className='generation-elapsed'; elapsed.dataset.chatRunStart=String(msg.started_at||msg.created_at||Date.now()); elapsed.textContent=formatChatRunDuration(Date.now()-Number(elapsed.dataset.chatRunStart));
+            live.append(dot,label,elapsed); bubble.appendChild(live);
+            requestAnimationFrame(refreshChatRunElapsed);
+        }
+
         function addMessageBubble(msg,index=0,allMessages=[]){
             const box = document.getElementById('messages');
             const row = document.createElement('div');
@@ -2576,7 +2761,6 @@
             stack.className='bubble-stack';
             const bubble = document.createElement('div');
             bubble.className = `bubble ${msg.role === 'user' ? 'user' : 'assistant'}`;
-            if(['queued','running'].includes(msg.run_status)) bubble.classList.add('streaming');
             if(msg.run_status) bubble.classList.add('run-state-message');
             const imageUrls = Array.isArray(msg.image_urls) && msg.image_urls.length ? msg.image_urls : (msg.image_url ? [msg.image_url] : []);
             if(imageUrls.length) bubble.classList.add('image-bubble');
@@ -2587,9 +2771,11 @@
                 bubble.classList.add('run-error-card');
                 const info=msg.error_info||{};
                 text.innerHTML=`<div class="run-error-title"><i data-lucide="circle-alert"></i><span>任务生成失败</span></div><div class="run-error-summary">${escapeHtml(info.summary||bubbleContent||'上游请求失败')}</div><div class="run-error-meta">${escapeHtml([msg.provider_id,msg.model,msg.attempt?`已尝试 ${msg.attempt}/${msg.max_attempts||3} 次`:''].filter(Boolean).join(' · '))}</div><div class="run-error-actions"><button type="button" onclick="retryFailedRun('${escapeHtml(msg.run_id||'')}')"><i data-lucide="rotate-ccw"></i><span>重试</span></button><button type="button" onclick="this.closest('.run-error-card').querySelector('.run-error-details').hidden=!this.closest('.run-error-card').querySelector('.run-error-details').hidden"><i data-lucide="file-search"></i><span>查看详情</span></button></div><div class="run-error-details" hidden>${escapeHtml([info.exception_type,info.status_code?`HTTP ${info.status_code}`:'',info.upstream_request_id?`上游请求 ${info.upstream_request_id}`:'',info.diagnostic_id?`诊断编号 ${info.diagnostic_id}`:''].filter(Boolean).join('\n')||'没有更多技术信息')}</div>`;
-            }else if(msg.role==='assistant') renderKnowledgeCitationText(text,bubbleContent,msg.knowledge_citations);
+            }else if(msg.role==='assistant' && ['queued','running'].includes(msg.run_status) && !bubbleContent.trim()) renderGenerationPlaceholder(text,msg);
+            else if(msg.role==='assistant') renderAssistantContent(text,bubbleContent,msg.knowledge_citations,bubble);
             else text.textContent=bubbleContent;
             bubble.appendChild(text);
+            if(msg.role==='assistant' && ['queued','running'].includes(msg.run_status) && bubbleContent.trim()) appendGenerationLive(bubble,msg);
             if(msg.attachments?.length){
                 const thumbs = document.createElement('div');
                 thumbs.className = 'thumbs';
@@ -2612,7 +2798,7 @@
                 bubble.appendChild(grid);
             }
             // Show model badge for assistant messages
-            if(msg.role === 'assistant' && msg.model){
+            if(msg.role === 'assistant' && msg.model && !['queued','running'].includes(msg.run_status)){
                 const badge = document.createElement('div');
                 const modelShort = msg.model.split('/').pop().split(':')[0];
                 const isMs = msg.model.includes('/') && !msg.model.includes('gpt');
@@ -2880,6 +3066,12 @@
                 provider: mode === 'image' ? activeImageProvider : currentProvider,
             };
             if(!currentConversation?.id && ordinaryKnowledgeDraft?.mode!=='none') payload.knowledge_context=ordinaryKnowledgeDraft;
+            if(currentJinniSnapshot()){
+                payload.runtime_provider_id=provider;
+                payload.runtime_model=activeChatModel;
+                payload.runtime_image_provider_id=activeImageProvider;
+                payload.runtime_image_model=activeImageModel;
+            }
             if(!currentConversation?.id && pendingJinni?.id) payload.jinni_id=pendingJinni.id;
             return payload;
         }

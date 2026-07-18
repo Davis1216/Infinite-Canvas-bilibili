@@ -6111,7 +6111,16 @@ function renderPendingOutput(pending){
             <button class="output-del" title="${tr('common.delete')}">×</button>
         </div>`;
     }
-    return `<div class="output-img-wrap loading-wrap" data-pending-id="${escapeAttr(pending.id)}"${pendingOutputStyle(pending)}><span class="output-time-pill running">${formatRunDuration(nowMs() - Number(pending.startedAt || nowMs()))}</span><div class="output-spinner"></div><button class="output-del" title="${tr('common.delete')}">×</button></div>`;
+    return `<div class="output-img-wrap loading-wrap" data-pending-id="${escapeAttr(pending.id)}"${pendingOutputStyle(pending)} role="status" aria-live="polite">
+        <span class="output-time-pill running">${formatRunDuration(nowMs() - Number(pending.startedAt || nowMs()))}</span>
+        <div class="output-progress-state">
+            <div class="output-spinner" aria-hidden="true"></div>
+            <div class="output-progress-title">任务生成中</div>
+            <div class="output-progress-detail">模型仍在处理，耗时会持续更新</div>
+            <div class="output-progress-line" aria-hidden="true"></div>
+        </div>
+        <button class="output-del" title="${tr('common.delete')}">×</button>
+    </div>`;
 }
 function captureOutputScrolls(){
     const state = new Map();
@@ -6191,7 +6200,7 @@ function renderNode(node){
         && (node.runStatus !== 'failed' || node._cascadeFailed);
     const statusHtml = showStatus ? (() => {
         const label = { queued:'排队中', running:'运行中', done:'完成', failed:'失败' }[node.runStatus] || '';
-        return `<span class="node-run-status ${node.runStatus}"><span class="dot"></span>${escapeHtml(label)}${node._cascadeIdx?' '+node._cascadeIdx:''}</span>`;
+        return `<span class="node-run-status ${node.runStatus}" role="status"><span class="dot"></span>${escapeHtml(label)}${node._cascadeIdx?' '+node._cascadeIdx:''}</span>`;
     })() : '';
     el.innerHTML = `<div class="node-head"><span class="node-title">${displayTitle}</span><div style="display:flex;align-items:center;gap:8px">${statusHtml}<button onclick="deleteNodeFromButton('${node.id}', event)" class="text-gray-300 hover:text-red-500"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`;
     const body = document.createElement('div');

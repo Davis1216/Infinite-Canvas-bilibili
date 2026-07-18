@@ -632,7 +632,7 @@
             transition: max-height .28s var(--fluid-ease), opacity .18s ease;
         }
         .settings-fold-group:not(.is-collapsed) {
-            max-height: 176px;
+            max-height: 220px;
             opacity: 1;
             pointer-events: auto;
         }
@@ -779,7 +779,7 @@
                 gap: 5px;
             }
             .settings-fold-group:not(.is-collapsed) {
-                max-height: 142px;
+                max-height: 178px;
             }
             .side-pill {
                 height:30px;
@@ -823,7 +823,7 @@
                 gap: 4px;
             }
             .settings-fold-group:not(.is-collapsed) {
-                max-height: 138px;
+                max-height: 174px;
             }
             .side-pill {
                 height:30px;
@@ -1528,6 +1528,12 @@
                         </svg>
                         <span class="side-pill-text" data-i18n="common.language">中文</span>
                     </button>
+                    <button class="side-pill" onclick="toggleMarkdownRendering()" id="markdown-render-toggle-btn" type="button" title="关闭 Markdown 渲染" aria-pressed="true">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M4 5h16v14H4z"></path><path d="M7 15V9l2.5 3L12 9v6"></path><path d="m14 12 2 2 2-2"></path>
+                        </svg>
+                        <span class="side-pill-text" id="markdown-render-toggle-text">Markdown 渲染：开</span>
+                    </button>
                     <button class="side-pill" onclick="openDisplayNameModal()" id="display-name-btn" type="button" title="设置欢迎称呼">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>
                         <span class="side-pill-text">称呼设置</span>
@@ -1572,8 +1578,8 @@
             <iframe id="frame-enhance" data-src="/static/enhance.html?v=2026.07.4.2.1784277153" scrolling="yes"></iframe>
             <iframe id="frame-klein" data-src="/static/klein.html?v=2026.07.4.2.1784277153" scrolling="yes"></iframe>
             <iframe id="frame-angle" data-src="/static/angle.html?v=2026.07.4.2.1784277153" scrolling="yes"></iframe>
-            <iframe id="frame-online" data-src="/static/online.html?v=2026.07.4.2.1784275612" scrolling="yes"></iframe>
-            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.07.4.2.1784208453" scrolling="yes"></iframe>
+            <iframe id="frame-online" data-src="/static/online.html?v=2026.07.4.2.1784369719" scrolling="yes"></iframe>
+            <iframe id="frame-gpt-chat" data-src="/static/gpt-chat.html?v=2026.07.4.2.1784368939" scrolling="yes"></iframe>
             <iframe id="frame-knowledge-base" data-src="/static/knowledge-base.html?v=2026.07.4.2.1784200348" scrolling="yes"></iframe>
             <iframe id="frame-usage-dashboard" data-src="/static/usage-dashboard.html?v=2026.07.4.2.1784104431" scrolling="yes"></iframe>
             <iframe id="frame-inspiration-space" data-src="/static/inspiration-space.html?v=2026.07.4.2.1784037058" scrolling="yes"></iframe>
@@ -1847,6 +1853,7 @@
             if(id === 'gpt-chat') {
                 try { target.contentWindow?.postMessage({ type:'brainstorm-new-chat' }, '*'); } catch(e) {}
                 syncDisplayNameToFrame(target);
+                syncMarkdownRenderingToFrame(target);
             }
             if(LOCAL_PAGE_IDS.includes(id)) {
                 setLocalNavCollapsed(false, { skipRemember:true });
@@ -1865,6 +1872,28 @@
 
         function syncDisplayNameToFrame(frame) {
             try { frame?.contentWindow?.postMessage({type:'studio-display-name',value:localStorage.getItem('studio_display_name')||''},'*'); } catch(e) {}
+        }
+
+        const CHAT_MARKDOWN_KEY='studio_chat_markdown_enabled';
+        function isMarkdownRenderingEnabled(){ return localStorage.getItem(CHAT_MARKDOWN_KEY)!=='0'; }
+        function syncMarkdownRenderingToFrame(frame){
+            try { frame?.contentWindow?.postMessage({type:'studio-chat-markdown',enabled:isMarkdownRenderingEnabled()},'*'); } catch(e) {}
+        }
+        function updateMarkdownRenderButton(){
+            const enabled=isMarkdownRenderingEnabled();
+            const button=document.getElementById('markdown-render-toggle-btn');
+            const label=document.getElementById('markdown-render-toggle-text');
+            if(button){
+                button.setAttribute('aria-pressed',enabled?'true':'false');
+                button.title=enabled?'关闭 Markdown 渲染':'开启 Markdown 渲染';
+                button.classList.toggle('is-disabled',!enabled);
+            }
+            if(label) label.textContent=`Markdown 渲染：${enabled?'开':'关'}`;
+        }
+        function toggleMarkdownRendering(){
+            localStorage.setItem(CHAT_MARKDOWN_KEY,isMarkdownRenderingEnabled()?'0':'1');
+            updateMarkdownRenderButton();
+            document.querySelectorAll('iframe').forEach(syncMarkdownRenderingToFrame);
         }
 
         function openDisplayNameModal(){
@@ -2076,6 +2105,7 @@
             updateThemeIcon(theme);
             if(window.StudioI18n) window.StudioI18n.apply();
             setLocalToolsVisible(isLocalToolsVisible(), { skipRemember:true });
+            updateMarkdownRenderButton();
             broadcastLanguage();
             const sidebar = document.getElementById('studioSidebar');
             if(sidebar) {
@@ -2092,6 +2122,7 @@
                 syncLanguageToFrame(f);
                 syncScaleToFrame(f);
                 syncDisplayNameToFrame(f);
+                syncMarkdownRenderingToFrame(f);
                 if(f.id === 'frame-gpt-chat' && f.classList.contains('active')) {
                     try { f.contentWindow?.postMessage({type:'brainstorm-new-chat'},'*'); } catch(e) {}
                 }

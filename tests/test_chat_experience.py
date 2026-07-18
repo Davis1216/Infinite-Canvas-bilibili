@@ -68,6 +68,70 @@ class ChatExperienceTests(unittest.TestCase):
         self.assertIn("config.has_ms_key", page)
         self.assertIn("providerReadyForSelection", page)
 
+    def test_assistant_markdown_and_polished_generation_state_are_wired(self):
+        chat_path = os.path.join(main.STATIC_DIR, "gpt-chat.html")
+        shell_path = os.path.join(main.STATIC_DIR, "index.html")
+        renderer_path = os.path.join(main.STATIC_DIR, "js", "chat-markdown.js")
+        with open(chat_path, "r", encoding="utf-8") as handle:
+            chat = handle.read()
+        with open(shell_path, "r", encoding="utf-8") as handle:
+            shell = handle.read()
+        with open(renderer_path, "r", encoding="utf-8") as handle:
+            renderer = handle.read()
+
+        self.assertIn('/static/js/chat-markdown.js', chat)
+        self.assertIn("renderAssistantContent(text,bubbleContent", chat)
+        self.assertIn("renderGenerationPlaceholder(text,msg)", chat)
+        self.assertIn("generation-orbit", chat)
+        self.assertNotIn(".bubble.assistant.streaming::after", chat)
+        self.assertIn("studio-chat-markdown", chat)
+        self.assertIn("markdown-render-toggle-btn", shell)
+        self.assertIn("syncMarkdownRenderingToFrame", shell)
+        self.assertIn("createCodeBlock", renderer)
+        self.assertIn("chat-table-scroll", renderer)
+        self.assertIn("task-list-item", renderer)
+        self.assertIn("knowledge-citation-link", renderer)
+        self.assertNotIn("javascript:", renderer.lower())
+
+    def test_jinni_model_picker_exposes_enabled_modules_and_runtime_models(self):
+        chat_path = os.path.join(main.STATIC_DIR, "gpt-chat.html")
+        with open(chat_path, "r", encoding="utf-8") as handle:
+            chat = handle.read()
+
+        self.assertIn("function jinniModelPickerKinds", chat)
+        self.assertIn("capabilities.generate_image || capabilities.edit_image", chat)
+        self.assertIn("mode = selected.capabilities?.generate_image || selected.capabilities?.edit_image ? 'agent' : 'chat'", chat)
+        self.assertIn("currentJinniSnapshot() ? jinniModelPickerKinds()", chat)
+        self.assertIn("modelLabel.textContent = shortModelName(currentMdl)", chat)
+        self.assertIn("runtime_image_provider_id:activeImageProvider", chat)
+        self.assertIn("payload.runtime_image_model=activeImageModel", chat)
+
+    def test_task_feedback_is_wired_across_online_chat_and_canvases(self):
+        paths = {
+            "online": os.path.join(main.STATIC_DIR, "online.html"),
+            "chat": os.path.join(main.STATIC_DIR, "gpt-chat.html"),
+            "canvas_js": os.path.join(main.STATIC_DIR, "js", "canvas.js"),
+            "canvas_css": os.path.join(main.STATIC_DIR, "css", "canvas.css"),
+            "smart_js": os.path.join(main.STATIC_DIR, "js", "smart-canvas.js"),
+            "smart_css": os.path.join(main.STATIC_DIR, "css", "smart-canvas.css"),
+        }
+        sources = {}
+        for name, path in paths.items():
+            with open(path, "r", encoding="utf-8") as handle:
+                sources[name] = handle.read()
+
+        self.assertIn('id="generationTimerValue"', sources["online"])
+        self.assertIn("setGenerationPhase('receive')", sources["online"])
+        self.assertIn("showGenerationError(message)", sources["online"])
+        self.assertIn('id="chatStatusToast"', sources["chat"])
+        self.assertIn("dataset.chatRunStart", sources["chat"])
+        self.assertIn('class="output-progress-state"', sources["canvas_js"])
+        self.assertIn(".node-run-status.done { background:#dcfce7", sources["canvas_css"])
+        self.assertNotIn(".node-run-status.done { display:none; }", sources["canvas_css"])
+        self.assertIn("function inferToastTone", sources["smart_js"])
+        self.assertIn("toast(`任务完成 · ${formatRunDuration(runMs)}`, 'success')", sources["smart_js"])
+        self.assertIn(".toast.error", sources["smart_css"])
+
     def test_first_queued_message_creates_exactly_one_history_record(self):
         async def no_background_run(*args, **kwargs):
             return None

@@ -2599,6 +2599,10 @@ class ChatRequest(BaseModel):
     client_request_id: str = ""
     knowledge_context: Optional[Dict[str, Any]] = None
     jinni_id: str = ""
+    runtime_provider_id: str = ""
+    runtime_model: str = ""
+    runtime_image_provider_id: str = ""
+    runtime_image_model: str = ""
     # Internal task fields. They are accepted by the local API so a failed run
     # can be replayed without trusting state reconstructed by the browser.
     skip_user_append: bool = False
@@ -2654,6 +2658,8 @@ class ConversationUpdateRequest(BaseModel):
     pinned: Optional[bool] = None
     runtime_provider_id: Optional[str] = None
     runtime_model: Optional[str] = None
+    runtime_image_provider_id: Optional[str] = None
+    runtime_image_model: Optional[str] = None
     knowledge_mode: Optional[str] = None
     strict_knowledge_base_id: Optional[str] = None
     knowledge_context: Optional[Dict[str, Any]] = None
@@ -4169,6 +4175,8 @@ def new_jinni_conversation(user_id, jinni, persist=True):
     conversation["jinni_snapshot"] = jinni_snapshot(jinni)
     conversation["runtime_provider_id"] = jinni.get("provider_id") or ""
     conversation["runtime_model"] = jinni.get("chat_model") or ""
+    conversation["runtime_image_provider_id"] = jinni.get("image_provider_id") or ""
+    conversation["runtime_image_model"] = jinni.get("image_model") or ""
     knowledge_config = normalize_jinni_knowledge_config(jinni)
     conversation["knowledge_mode"] = knowledge_config.get("default_mode") or "none"
     conversation["strict_knowledge_base_id"] = knowledge_config.get("strict", {}).get("knowledge_base_id") or ""
@@ -4287,7 +4295,7 @@ def load_conversation(user_id, conversation_id):
 
 def update_conversation(user_id, conversation_id, title=None, pinned=None, runtime_provider_id=None, runtime_model=None,
                         knowledge_mode=None, strict_knowledge_base_id=None, knowledge_context=None,
-                        refresh_knowledge_generations=False):
+                        refresh_knowledge_generations=False, runtime_image_provider_id=None, runtime_image_model=None):
     path = conversation_path(user_id, conversation_id)
     with CONVERSATION_LOCK:
         if not os.path.exists(path):
@@ -4312,6 +4320,15 @@ def update_conversation(user_id, conversation_id, title=None, pinned=None, runti
             if runtime_model is not None:
                 data["runtime_model"] = str(runtime_model or "").strip()[:240]
                 data["runtime_model_updated_at"] = timestamp
+        if runtime_image_provider_id is not None or runtime_image_model is not None:
+            if not data.get("jinni_snapshot"):
+                raise HTTPException(status_code=400, detail="普通对话不支持会话级 Jinni 图像模型覆盖")
+            if runtime_image_provider_id is not None:
+                data["runtime_image_provider_id"] = str(runtime_image_provider_id or "").strip()[:120]
+                data["runtime_image_provider_id_updated_at"] = timestamp
+            if runtime_image_model is not None:
+                data["runtime_image_model"] = str(runtime_image_model or "").strip()[:240]
+                data["runtime_image_model_updated_at"] = timestamp
         if knowledge_mode is not None or strict_knowledge_base_id is not None:
             snapshot = data.get("jinni_snapshot") if isinstance(data.get("jinni_snapshot"), dict) else None
             if not snapshot:
@@ -8800,8 +8817,8 @@ def prepare_jinni_chat_payload(payload, conversation, include_knowledge=True, us
         return payload
     payload.provider = str(conversation.get("runtime_provider_id") or snapshot.get("provider_id") or payload.provider).strip()
     payload.model = str(conversation.get("runtime_model") or snapshot.get("chat_model") or payload.model).strip()
-    payload.image_provider = str(snapshot.get("image_provider_id") or payload.image_provider or payload.provider).strip()
-    payload.image_model = str(snapshot.get("image_model") or payload.image_model).strip()
+    payload.image_provider = str(conversation.get("runtime_image_provider_id") or snapshot.get("image_provider_id") or payload.image_provider or payload.provider).strip()
+    payload.image_model = str(conversation.get("runtime_image_model") or snapshot.get("image_model") or payload.image_model).strip()
     if payload.mode == "image" and not capabilities.get("generate_image"):
         raise HTTPException(status_code=403, detail="当前 Jinni 未启用生图能力")
     if capabilities.get("generate_image") or capabilities.get("edit_image"):
@@ -15491,6 +15508,7 @@ async def patch_conversation(conversation_id: str, payload: ConversationUpdateRe
         payload.runtime_provider_id, payload.runtime_model,
         payload.knowledge_mode, payload.strict_knowledge_base_id,
         payload.knowledge_context, payload.refresh_knowledge_generations,
+        payload.runtime_image_provider_id, payload.runtime_image_model,
     )}
 
 @app.delete("/api/conversations/{conversation_id}")
@@ -17667,6 +17685,18 @@ async def create_chat_run(payload: ChatRequest, request: Request, x_user_id: str
         else:
             conversation = new_conversation(user_id, display_title(payload.message), persist=False)
         payload.conversation_id = conversation["id"]
+    runtime_overridden = False
+    if conversation.get("jinni_snapshot"):
+        for payload_key, conversation_key, limit in (
+            ("runtime_provider_id", "runtime_provider_id", 120),
+            ("runtime_model", "runtime_model", 240),
+            ("runtime_image_provider_id", "runtime_image_provider_id", 120),
+            ("runtime_image_model", "runtime_image_model", 240),
+        ):
+            value = str(getattr(payload, payload_key, "") or "").strip()[:limit]
+            if value and value != conversation.get(conversation_key):
+                conversation[conversation_key] = value
+                runtime_overridden = True
     if is_new_conversation and payload.knowledge_context is not None:
         try:
             conversation["knowledge_context"] = normalize_ordinary_knowledge_context(
@@ -17686,6 +17716,8 @@ async def create_chat_run(payload: ChatRequest, request: Request, x_user_id: str
         if payload.jinni_id:
             jinni["last_used_at"] = now_ms()
             save_jinni(user_id, jinni)
+    elif runtime_overridden:
+        save_conversation(user_id, conversation)
 
     timestamp = now_ms()
     run = {
